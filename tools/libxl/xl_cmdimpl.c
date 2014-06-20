@@ -157,6 +157,7 @@ struct domain_create {
     char *extra_config; /* extra config string */
     const char *restore_file;
     int migrate_fd; /* -1 means none */
+    int send_fd; /* -1 means none */
     char **migration_domname_r; /* from malloc */
 };
 
@@ -2560,6 +2561,7 @@ static uint32_t create_domain(struct domain_create *dom_info)
     void *config_data = 0;
     int config_len = 0;
     int restore_fd = -1;
+    int send_fd = -1;
     const libxl_asyncprogress_how *autoconnect_console_how;
     struct save_file_header hdr;
 
@@ -2576,6 +2578,7 @@ static uint32_t create_domain(struct domain_create *dom_info)
         if (migrate_fd >= 0) {
             restore_source = "<incoming migration stream>";
             restore_fd = migrate_fd;
+            send_fd = dom_info->send_fd;
         } else {
             restore_source = restore_file;
             restore_fd = open(restore_file, O_RDONLY);
@@ -2764,7 +2767,7 @@ start:
 
         ret = libxl_domain_create_restore(ctx, &d_config,
                                           &domid, restore_fd,
-                                          &params,
+                                          send_fd, &params,
                                           0, autoconnect_console_how);
 
         libxl_domain_restore_params_dispose(&params);
@@ -4306,6 +4309,7 @@ static void migrate_receive(int debug, int daemonize, int monitor,
     dom_info.monitor = monitor;
     dom_info.paused = 1;
     dom_info.migrate_fd = recv_fd;
+    dom_info.send_fd = send_fd;
     dom_info.migration_domname_r = &migration_domname;
     dom_info.checkpointed_stream = checkpointed;
 
@@ -4476,6 +4480,7 @@ int main_restore(int argc, char **argv)
     dom_info.config_file = config_file;
     dom_info.restore_file = checkpoint_file;
     dom_info.migrate_fd = -1;
+    dom_info.send_fd = -1;
     dom_info.vnc = vnc;
     dom_info.vncautopass = vncautopass;
     dom_info.console_autoconnect = console_autoconnect;
@@ -4943,6 +4948,7 @@ int main_create(int argc, char **argv)
     dom_info.quiet = quiet;
     dom_info.config_file = filename;
     dom_info.migrate_fd = -1;
+    dom_info.send_fd = -1;
     dom_info.vnc = vnc;
     dom_info.vncautopass = vncautopass;
     dom_info.console_autoconnect = console_autoconnect;

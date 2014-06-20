@@ -1498,7 +1498,7 @@ static void domain_create_cb(libxl__egc *egc,
                              int rc, uint32_t domid);
 
 static int do_domain_create(libxl_ctx *ctx, libxl_domain_config *d_config,
-                            uint32_t *domid, int restore_fd,
+                            uint32_t *domid, int restore_fd, int send_fd,
                             const libxl_domain_restore_params *params,
                             const libxl_asyncop_how *ao_how,
                             const libxl_asyncprogress_how *aop_console_how)
@@ -1512,6 +1512,7 @@ static int do_domain_create(libxl_ctx *ctx, libxl_domain_config *d_config,
     libxl_domain_config_init(&cdcs->dcs.guest_config_saved);
     libxl_domain_config_copy(ctx, &cdcs->dcs.guest_config_saved, d_config);
     cdcs->dcs.restore_fd = cdcs->dcs.libxc_fd = restore_fd;
+    cdcs->dcs.send_fd = send_fd;
     if (restore_fd > -1)
         cdcs->dcs.restore_params = *params;
     cdcs->dcs.callback = domain_create_cb;
@@ -1540,17 +1541,17 @@ int libxl_domain_create_new(libxl_ctx *ctx, libxl_domain_config *d_config,
                             const libxl_asyncop_how *ao_how,
                             const libxl_asyncprogress_how *aop_console_how)
 {
-    return do_domain_create(ctx, d_config, domid, -1, NULL,
+    return do_domain_create(ctx, d_config, domid, -1, -1, NULL,
                             ao_how, aop_console_how);
 }
 
 int libxl_domain_create_restore(libxl_ctx *ctx, libxl_domain_config *d_config,
-                                uint32_t *domid, int restore_fd,
+                                uint32_t *domid, int restore_fd, int send_fd,
                                 const libxl_domain_restore_params *params,
                                 const libxl_asyncop_how *ao_how,
                                 const libxl_asyncprogress_how *aop_console_how)
 {
-    return do_domain_create(ctx, d_config, domid, restore_fd, params,
+    return do_domain_create(ctx, d_config, domid, restore_fd, send_fd, params,
                             ao_how, aop_console_how);
 }
 

@@ -537,7 +537,7 @@ value stub_libxl_domain_create_restore(value ctx, value domain_config, value par
 	restore_fd = Int_val(Field(params, 0));
 
 	caml_enter_blocking_section();
-	ret = libxl_domain_create_restore(CTX, &c_dconfig, &c_domid, restore_fd,
+	ret = libxl_domain_create_restore(CTX, &c_dconfig, &c_domid, restore_fd, -1,
 		&c_params, ao_how, NULL);
 	caml_leave_blocking_section();
 

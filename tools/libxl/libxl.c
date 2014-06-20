@@ -835,7 +835,7 @@ int libxl_domain_remus_start(libxl_ctx *ctx, libxl_domain_remus_info *info,
     dss->callback = remus_failover_cb;
     dss->domid = domid;
     dss->fd = send_fd;
-    /* TODO do something with recv_fd */
+    dss->recv_fd = recv_fd;
     dss->type = type;
     dss->live = 1;
     dss->debug = 0;
