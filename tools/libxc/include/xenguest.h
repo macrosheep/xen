@@ -130,6 +130,14 @@ struct restore_callbacks {
     /* Enable qemu-dm logging dirty pages to xen */
     int (*switch_qemu_logdirty)(int domid, unsigned enable, void *data); /* HVM only */
 
+    /*
+     * callback to send store mfn and console mfn to xl
+     * if we want to resume vm before xc_domain_save()
+     * exits.
+     */
+    void (*restore_results)(unsigned long store_mfn, unsigned long console_mfn,
+                            void *data);
+
     /* callback to restore toolstack specific data */
     int (*toolstack_restore)(uint32_t domid, const uint8_t *buf,
             uint32_t size, void* data);
