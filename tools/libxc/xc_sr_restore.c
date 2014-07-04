@@ -563,7 +563,9 @@ static int handle_checkpoint(struct xc_sr_context *ctx)
         if ( rc )
             goto err;
 
-        /* TODO: call restore_results */
+        ctx->restore.callbacks->restore_results(ctx->restore.xenstore_gfn,
+                                                ctx->restore.console_gfn,
+                                                ctx->restore.callbacks->data);
 
         /* Resume secondary vm */
         ret = ctx->restore.callbacks->postcopy(ctx->restore.callbacks->data);
@@ -846,7 +848,8 @@ int xc_domain_restore2(xc_interface *xch, int io_fd, uint32_t dom,
         /* this is COLO restore */
         assert(callbacks->suspend &&
                callbacks->postcopy &&
-               callbacks->should_checkpoint);
+               callbacks->should_checkpoint &&
+               callbacks->restore_results);
     }
 
     IPRINTF("In experimental %s", __func__);

@@ -140,6 +140,14 @@ struct restore_callbacks {
      */
     int (*should_checkpoint)(void* data);
 
+    /*
+     * callback to send store mfn and console mfn to xl
+     * if we want to resume vm before xc_domain_save()
+     * exits.
+     */
+    void (*restore_results)(unsigned long store_mfn, unsigned long console_mfn,
+                            void *data);
+
     /* to be provided as the last argument to each callback function */
     void* data;
 };
