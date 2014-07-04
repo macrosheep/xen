@@ -29,7 +29,7 @@ our @msgs = (
     [  6, 'srcxA',  "should_checkpoint", [] ],
     [  7, 'scxA',   "switch_qemu_logdirty",  [qw(int domid
                                               unsigned enable)] ],
-    [  8, 'r',      "restore_results",       ['unsigned long', 'store_mfn',
+    [  8, 'rcx',    "restore_results",       ['unsigned long', 'store_mfn',
                                               'unsigned long', 'console_mfn'] ],
     [  9, 'srW',    "complete",              [qw(int retval
                                                  int errnoval)] ],

@@ -1148,6 +1148,8 @@ static void domcreate_bootloader_done(libxl__egc *egc,
     dcs->srs.completion_callback = domcreate_stream_done;
 
     /* colo restore setup */
+    callbacks->restore_results = libxl__srm_callout_callback_restore_results;
+
     if (checkpointed_stream == LIBXL_CHECKPOINTED_STREAM_COLO) {
         crs->ao = ao;
         crs->domid = domid;
