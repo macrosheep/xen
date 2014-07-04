@@ -1121,6 +1121,7 @@ static void domcreate_bootloader_done(libxl__egc *egc,
         rc = ERROR_INVAL;
         goto out;
     }
+    callbacks->restore_results = libxl__srm_callout_callback_restore_results;
 
     if (checkpointed_stream == LIBXL_CHECKPOINTED_STREAM_COLO) {
         crs->ao = ao;

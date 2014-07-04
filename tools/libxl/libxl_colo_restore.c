@@ -152,11 +152,6 @@ static void colo_resume_vm(libxl__egc *egc,
         return;
     }
 
-    /*
-     * TODO: get store mfn and console mfn
-     *  We should call the callback restore_results in
-     *  xc_domain_restore() before resuming the guest.
-     */
     libxl__xc_domain_restore_done(egc, dcs, 0, 0, 0);
 
     return;
