@@ -15,6 +15,7 @@ our @msgs = (
     #         and its null-ness needs to be passed through to the helper's xc
     #   W  - needs a return value; callback is synchronous
     #   A  - needs a return value; callback is asynchronous
+    #   B  - return value is an pointer
     [  1, 'sr',     "log",                   [qw(uint32_t level
                                                  uint32_t errnoval
                                                  STRING context
@@ -99,23 +100,28 @@ our $libxl = "libxl__srm";
 our $callback = "${libxl}_callout_callback";
 our $receiveds = "${libxl}_callout_received";
 our $sendreply = "${libxl}_callout_sendreply";
+our $sendreply_data = "${libxl}_callout_sendreply_data";
 our $getcallbacks = "${libxl}_callout_get_callbacks";
 our $enumcallbacks = "${libxl}_callout_enumcallbacks";
 sub cbtype ($) { "${libxl}_".$_[0]."_autogen_callbacks"; };
 
 f_decl($sendreply, 'callout', 'void', "(int r, void *user)");
+f_decl($sendreply_data, 'callout', 'void',
+       "(const void *data, uint64_t size, void *user)");
 
 our $helper = "helper";
 our $encode = "${helper}_stub";
 our $allocbuf = "${helper}_allocbuf";
 our $transmit = "${helper}_transmitmsg";
 our $getreply = "${helper}_getreply";
+our $getreply_data = "${helper}_getreply_data";
 our $setcallbacks = "${helper}_setcallbacks";
 
 f_decl($allocbuf, 'helper', 'unsigned char *', '(int len, void *user)');
 f_decl($transmit, 'helper', 'void',
        '(unsigned char *msg_freed, int len, void *user)');
 f_decl($getreply, 'helper', 'int', '(void *user)');
+f_decl($getreply_data, 'helper', 'uint8_t *', '(void *user)');
 
 sub typeid ($) { my ($t) = @_; $t =~ s/\W/_/; return $t; };
 
@@ -259,12 +265,36 @@ foreach my $msginfo (@msgs) {
 
     $f_more_sr->("    case $msgnum: { /* $name */\n");
     if ($flags =~ m/W/) {
-        $f_more_sr->("        int r;\n");
+        if ($flags =~ m/B/) {
+            $f_more_sr->("        uint8_t *data;\n".
+                         "        uint64_t size;\n");
+        } else {
+            $f_more_sr->("        int r;\n");
+        }
     }
 
-    my $c_rtype_helper = $flags =~ m/[WA]/ ? 'int' : 'void';
-    my $c_rtype_callout = $flags =~ m/W/ ? 'int' : 'void';
+    my $c_rtype_helper;
+    if ($flags =~ m/[WA]/) {
+        if ($flags =~ m/B/) {
+            $c_rtype_helper = 'uint8_t *'
+        } else {
+            $c_rtype_helper = 'int'
+        }
+    } else {
+        $c_rtype_helper = 'void';
+    }
+    my $c_rtype_callout;
+    if ($flags =~ m/W/) {
+        if ($flags =~ m/B/) {
+            $c_rtype_callout = 'uint8_t *';
+        } else {
+            $c_rtype_callout = 'int';
+        }
+    } else {
+        $c_rtype_callout = 'void';
+    }
     my $c_decl = '(';
+    my $c_helper_decl = '';
     my $c_callback_args = '';
 
     f_more("${encode}_$name",
@@ -305,7 +335,15 @@ END_ALWAYS
         f_more("${encode}_$name", "	${typeid}_put(buf, &len, $c_args);\n");
     }
     $f_more_sr->($c_recv);
+    $c_helper_decl = $c_decl;
+    if ($flags =~ m/W/ and $flags =~ m/B/) {
+        $c_decl .= "uint64_t *size, "
+    }
     $c_decl .= "void *user)";
+    $c_helper_decl .= "void *user)";
+    if ($flags =~ m/W/ and $flags =~ m/B/) {
+        $c_callback_args .= "&size, "
+    }
     $c_callback_args .= "user";
 
     $f_more_sr->("        if (msg != endmsg) return 0;\n");
@@ -326,10 +364,12 @@ END_ALWAYS
     my $c_make_callback = "$c_callback($c_callback_args)";
     if ($flags !~ m/W/) {
 	$f_more_sr->("        $c_make_callback;\n");
+    } elsif ($flags =~ m/B/) {
+        $f_more_sr->("        data = $c_make_callback;\n".
+                     "        $sendreply_data(data, size, user);\n");
     } else {
         $f_more_sr->("        r = $c_make_callback;\n".
                      "        $sendreply(r, user);\n");
-	f_decl($sendreply, 'callout', 'void', '(int r, void *user)');
     }
     if ($flags =~ m/x/) {
         my $c_v = "(1u<<$msgnum)";
@@ -340,7 +380,7 @@ END_ALWAYS
     }
     $f_more_sr->("        return 1;\n    }\n\n");
     f_decl("${callback}_$name", 'callout', $c_rtype_callout, $c_decl);
-    f_decl("${encode}_$name", 'helper', $c_rtype_helper, $c_decl);
+    f_decl("${encode}_$name", 'helper', $c_rtype_helper, $c_helper_decl);
     f_more("${encode}_$name",
 "        if (buf) break;
         buf = ${helper}_allocbuf(len, user);
@@ -352,12 +392,23 @@ END_ALWAYS
     ${transmit}(buf, len, user);
 ");
     if ($flags =~ m/[WA]/) {
-	f_more("${encode}_$name",
-               (<<END_ALWAYS.($debug ? <<END_DEBUG : '').<<END_ALWAYS));
+        if ($flags =~ m/B/) {
+            f_more("${encode}_$name",
+                   (<<END_ALWAYS.($debug ? <<END_DEBUG : '')));
+    uint8_t *r = ${helper}_getreply_data(user);
+END_ALWAYS
+    fprintf(stderr,"libxl-save-helper: $name got reply data\\n");
+END_DEBUG
+        } else {
+            f_more("${encode}_$name",
+                   (<<END_ALWAYS.($debug ? <<END_DEBUG : '')));
     int r = ${helper}_getreply(user);
 END_ALWAYS
     fprintf(stderr,"libxl-save-helper: $name got reply %d\\n",r);
 END_DEBUG
+    }
+
+    f_more("${encode}_$name", (<<END_ALWAYS));
     return r;
 END_ALWAYS
     }

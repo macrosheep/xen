@@ -3180,6 +3180,9 @@ _hidden void libxl__xc_domain_save_done(libxl__egc*, void *dss_void,
  * When they are ready to indicate completion, they call this. */
 void libxl__xc_domain_saverestore_async_callback_done(libxl__egc *egc,
                            libxl__save_helper_state *shs, int return_value);
+void libxl__xc_domain_saverestore_async_callback_done_with_data(libxl__egc *egc,
+                           libxl__save_helper_state *shs,
+                           const void *data, uint64_t size);
 
 
 _hidden void libxl__domain_suspend_common_switch_qemu_logdirty
