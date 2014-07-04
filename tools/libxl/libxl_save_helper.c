@@ -155,6 +155,23 @@ int helper_getreply(void *user)
     return v;
 }
 
+uint8_t *helper_getreply_data(void *user)
+{
+    uint64_t size;
+    int r = read_exactly(0, &size, sizeof(size));
+    uint8_t *data;
+
+    if (r <= 0)
+        exit(-2);
+
+    data = helper_allocbuf(size, user);
+    r = read_exactly(0, data, size);
+    if (r <= 0)
+        exit(-2);
+
+    return data;
+}
+
 /*----- other callbacks -----*/
 
 static int toolstack_save_fd;
