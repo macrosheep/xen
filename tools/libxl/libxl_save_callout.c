@@ -145,6 +145,15 @@ void libxl__xc_domain_saverestore_async_callback_done(libxl__egc *egc,
     shs->egc = 0;
 }
 
+void libxl__xc_domain_saverestore_async_callback_done_with_data(libxl__egc *egc,
+                           libxl__save_helper_state *shs,
+                           const void *data, uint64_t size)
+{
+    shs->egc = egc;
+    libxl__srm_callout_sendreply_data(data, size, shs);
+    shs->egc = 0;
+}
+
 /*----- helper execution -----*/
 
 static void run_helper(libxl__egc *egc, libxl__save_helper_state *shs,
@@ -366,6 +375,28 @@ void libxl__srm_callout_sendreply(int r, void *user)
     errnoval = libxl_write_exactly(CTX, libxl__carefd_fd(shs->pipes[0]),
                                    &r, sizeof(r), shs->stdin_what,
                                    "callback return value");
+    if (errnoval)
+        helper_failed(egc, shs, ERROR_FAIL);
+}
+
+void libxl__srm_callout_sendreply_data(const void *data, uint64_t size, void *user)
+{
+    libxl__save_helper_state *shs = user;
+    libxl__egc *egc = shs->egc;
+    STATE_AO_GC(shs->ao);
+    int errnoval;
+
+    errnoval = libxl_write_exactly(CTX, libxl__carefd_fd(shs->pipes[0]),
+                                   &size, sizeof(size), shs->stdin_what,
+                                   "callback return data length");
+    if (errnoval)
+        goto out;
+
+    errnoval = libxl_write_exactly(CTX, libxl__carefd_fd(shs->pipes[0]),
+                                   data, size, shs->stdin_what,
+                                   "callback return data");
+
+out:
     if (errnoval)
         helper_failed(egc, shs, ERROR_FAIL);
 }
