@@ -1067,7 +1067,7 @@ static void switch_logdirty_timeout(libxl__egc *egc, libxl__ev_time *ev,
 static void switch_logdirty_xswatch(libxl__egc *egc, libxl__ev_xswatch*,
                             const char *watch_path, const char *event_path);
 static void switch_logdirty_done(libxl__egc *egc,
-                                 libxl__domain_suspend_state *dss, int ok);
+                                 libxl__logdirty_switch *lds, int ok);
 
 static void logdirty_init(libxl__logdirty_switch *lds)
 {
@@ -1078,12 +1078,10 @@ static void logdirty_init(libxl__logdirty_switch *lds)
 
 static void domain_suspend_switch_qemu_xen_traditional_logdirty
                                (int domid, unsigned enable,
-                                libxl__save_helper_state *shs)
+                                libxl__logdirty_switch *lds,
+                                libxl__egc *egc)
 {
-    libxl__egc *egc = shs->egc;
-    libxl__domain_suspend_state *dss = CONTAINER_OF(shs, *dss, shs);
-    libxl__logdirty_switch *lds = &dss->logdirty;
-    STATE_AO_GC(dss->ao);
+    STATE_AO_GC(lds->ao);
     int rc;
     xs_transaction_t t = 0;
     const char *got;
@@ -1144,25 +1142,34 @@ static void domain_suspend_switch_qemu_xen_traditional_logdirty
  out:
     LOG(ERROR,"logdirty switch failed (rc=%d), aborting suspend",rc);
     libxl__xs_transaction_abort(gc, &t);
-    switch_logdirty_done(egc,dss,-1);
+    switch_logdirty_done(egc,lds,-1);
 }
 
 static void domain_suspend_switch_qemu_xen_logdirty
                                (int domid, unsigned enable,
-                                libxl__save_helper_state *shs)
+                                libxl__logdirty_switch *lds,
+                                libxl__egc *egc)
 {
-    libxl__egc *egc = shs->egc;
-    libxl__domain_suspend_state *dss = CONTAINER_OF(shs, *dss, shs);
-    STATE_AO_GC(dss->ao);
+    STATE_AO_GC(lds->ao);
     int rc;
 
     rc = libxl__qmp_set_global_dirty_log(gc, domid, enable);
     if (!rc) {
-        libxl__xc_domain_saverestore_async_callback_done(egc, shs, 0);
+        lds->callback(egc, lds, 0);
     } else {
         LOG(ERROR,"logdirty switch failed (rc=%d), aborting suspend",rc);
-        libxl__xc_domain_saverestore_async_callback_done(egc, shs, -1);
+        lds->callback(egc, lds, -1);
     }
+}
+
+static void libxl__domain_suspend_switch_qemu_logdirty_done
+                                (libxl__egc *egc,
+                                 libxl__logdirty_switch *lds,
+                                 int rc)
+{
+    libxl__domain_suspend_state *dss = CONTAINER_OF(lds, *dss, logdirty);
+
+    libxl__xc_domain_saverestore_async_callback_done(egc, &dss->shs, rc);
 }
 
 void libxl__domain_suspend_common_switch_qemu_logdirty
@@ -1171,37 +1178,49 @@ void libxl__domain_suspend_common_switch_qemu_logdirty
     libxl__save_helper_state *shs = user;
     libxl__egc *egc = shs->egc;
     libxl__domain_suspend_state *dss = CONTAINER_OF(shs, *dss, shs);
-    STATE_AO_GC(dss->ao);
+
+    /* convenience aliases */
+    libxl__logdirty_switch *const lds = &dss->logdirty;
+
+    lds->callback = libxl__domain_suspend_switch_qemu_logdirty_done;
+
+    libxl__domain_common_switch_qemu_logdirty(domid, enable, lds, egc);
+}
+
+void libxl__domain_common_switch_qemu_logdirty(int domid, unsigned enable,
+                                               libxl__logdirty_switch *lds,
+                                               libxl__egc *egc)
+{
+    STATE_AO_GC(lds->ao);
 
     switch (libxl__device_model_version_running(gc, domid)) {
     case LIBXL_DEVICE_MODEL_VERSION_QEMU_XEN_TRADITIONAL:
-        domain_suspend_switch_qemu_xen_traditional_logdirty(domid, enable, shs);
+        domain_suspend_switch_qemu_xen_traditional_logdirty(domid, enable,
+                                                            lds, egc);
         break;
     case LIBXL_DEVICE_MODEL_VERSION_QEMU_XEN:
-        domain_suspend_switch_qemu_xen_logdirty(domid, enable, shs);
+        domain_suspend_switch_qemu_xen_logdirty(domid, enable, lds, egc);
         break;
     default:
         LOG(ERROR,"logdirty switch failed"
             ", no valid device model version found, aborting suspend");
-        libxl__xc_domain_saverestore_async_callback_done(egc, shs, -1);
+        lds->callback(egc, lds, -1);
     }
 }
 static void switch_logdirty_timeout(libxl__egc *egc, libxl__ev_time *ev,
                                     const struct timeval *requested_abs)
 {
-    libxl__domain_suspend_state *dss = CONTAINER_OF(ev, *dss, logdirty.timeout);
-    STATE_AO_GC(dss->ao);
+    libxl__logdirty_switch *lds = CONTAINER_OF(ev, *lds, timeout);
+    STATE_AO_GC(lds->ao);
     LOG(ERROR,"logdirty switch: wait for device model timed out");
-    switch_logdirty_done(egc,dss,-1);
+    switch_logdirty_done(egc,lds,-1);
 }
 
 static void switch_logdirty_xswatch(libxl__egc *egc, libxl__ev_xswatch *watch,
                             const char *watch_path, const char *event_path)
 {
-    libxl__domain_suspend_state *dss =
-        CONTAINER_OF(watch, *dss, logdirty.watch);
-    libxl__logdirty_switch *lds = &dss->logdirty;
-    STATE_AO_GC(dss->ao);
+    libxl__logdirty_switch *lds = CONTAINER_OF(watch, *lds, watch);
+    STATE_AO_GC(lds->ao);
     const char *got;
     xs_transaction_t t = 0;
     int rc;
@@ -1245,24 +1264,23 @@ static void switch_logdirty_xswatch(libxl__egc *egc, libxl__ev_xswatch *watch,
     libxl__xs_transaction_abort(gc, &t);
 
     if (!rc) {
-        switch_logdirty_done(egc,dss,0);
+        switch_logdirty_done(egc,lds,0);
     } else if (rc < 0) {
         LOG(ERROR,"logdirty switch: failed (rc=%d)",rc);
-        switch_logdirty_done(egc,dss,-1);
+        switch_logdirty_done(egc,lds,-1);
     }
 }
 
 static void switch_logdirty_done(libxl__egc *egc,
-                                 libxl__domain_suspend_state *dss,
+                                 libxl__logdirty_switch *lds,
                                  int broke)
 {
-    STATE_AO_GC(dss->ao);
-    libxl__logdirty_switch *lds = &dss->logdirty;
+    STATE_AO_GC(lds->ao);
 
     libxl__ev_xswatch_deregister(gc, &lds->watch);
     libxl__ev_time_deregister(gc, &lds->timeout);
 
-    libxl__xc_domain_saverestore_async_callback_done(egc, &dss->shs, broke);
+    lds->callback(egc, lds, broke);
 }
 
 /*----- callbacks, called by xc_domain_save -----*/
@@ -1957,6 +1975,7 @@ void libxl__domain_suspend(libxl__egc *egc, libxl__domain_suspend_state *dss)
     libxl__domain_suspend_state2 *dss2 = &dss->dss2;
 
     logdirty_init(&dss->logdirty);
+    dss->logdirty.ao = ao;
     libxl__xswait_init(&dss2->pvcontrol);
     libxl__ev_evtchn_init(&dss2->guest_evtchn);
     libxl__ev_xswatch_init(&dss2->guest_watch);
