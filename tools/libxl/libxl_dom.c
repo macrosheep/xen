@@ -2228,6 +2228,31 @@ static void remus_teardown_done(libxl__egc *egc,
     dss->callback(egc, dss, rc);
 }
 
+int libxl__domain_unpause_device_model(libxl__gc *gc, uint32_t domid)
+{
+    char *path;
+    char *state;
+
+    switch (libxl__device_model_version_running(gc, domid)) {
+    case LIBXL_DEVICE_MODEL_VERSION_QEMU_XEN_TRADITIONAL:
+        path = libxl__sprintf(gc, "/local/domain/0/device-model/%d/state", domid);
+        state = libxl__xs_read(gc, XBT_NULL, path);
+        if (state != NULL && !strcmp(state, "paused")) {
+            libxl__qemu_traditional_cmd(gc, domid, "continue");
+            libxl__wait_for_device_model_deprecated(gc, domid, "running",
+                                         NULL, NULL, NULL);
+        }
+    case LIBXL_DEVICE_MODEL_VERSION_QEMU_XEN:
+        if (libxl__qmp_resume(gc, domid))
+            return ERROR_FAIL;
+        break;
+    default:
+        return ERROR_FAIL;
+    }
+
+    return 0;
+}
+
 /*==================== Miscellaneous ====================*/
 
 char *libxl__uuid2string(libxl__gc *gc, const libxl_uuid uuid)

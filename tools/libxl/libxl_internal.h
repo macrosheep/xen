@@ -1018,6 +1018,8 @@ _hidden int libxl__toolstack_restore(uint32_t domid, const uint8_t *buf,
                                      uint32_t size, void *data);
 _hidden int libxl__domain_restore_device_model(libxl__gc *gc, uint32_t domid);
 _hidden int libxl__domain_resume_device_model(libxl__gc *gc, uint32_t domid);
+_hidden int libxl__domain_unpause_device_model(libxl__gc *gc,
+                                               uint32_t domid);
 
 _hidden const char *libxl__userdata_path(libxl__gc *gc, uint32_t domid,
                                          const char *userdata_userid,
