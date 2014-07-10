@@ -1043,6 +1043,7 @@ _hidden int libxl__userdata_store(libxl__gc *gc, uint32_t domid,
 _hidden int libxl__domain_restore(libxl__gc *gc, uint32_t domid);
 _hidden int libxl__domain_resume(libxl__gc *gc, uint32_t domid,
                                  int suspend_cancel);
+_hidden int libxl__domain_unpause(libxl__gc *gc, uint32_t domid);
 
 /* returns 0 or 1, or a libxl error code */
 _hidden int libxl__domain_pvcontrol_available(libxl__gc *gc, uint32_t domid);

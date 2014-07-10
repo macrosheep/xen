@@ -966,9 +966,8 @@ out:
     return AO_INPROGRESS;
 }
 
-int libxl_domain_unpause(libxl_ctx *ctx, uint32_t domid)
+int libxl__domain_unpause(libxl__gc *gc, uint32_t domid)
 {
-    GC_INIT(ctx);
     char *path;
     char *state;
     int ret, rc = 0;
@@ -980,7 +979,7 @@ int libxl_domain_unpause(libxl_ctx *ctx, uint32_t domid)
     }
 
     if (type == LIBXL_DOMAIN_TYPE_HVM) {
-        uint32_t dm_domid = libxl_get_stubdom_id(ctx, domid);
+        uint32_t dm_domid = libxl_get_stubdom_id(CTX, domid);
 
         path = libxl__device_model_xs_path(gc, dm_domid, domid, "/state");
         state = libxl__xs_read(gc, XBT_NULL, path);
@@ -990,12 +989,21 @@ int libxl_domain_unpause(libxl_ctx *ctx, uint32_t domid)
                                          NULL, NULL, NULL);
         }
     }
-    ret = xc_domain_unpause(ctx->xch, domid);
-    if (ret<0) {
-        LIBXL__LOG_ERRNO(ctx, LIBXL__LOG_ERROR, "unpausing domain %d", domid);
+
+    ret = xc_domain_unpause(CTX->xch, domid);
+    if (ret < 0) {
+        LIBXL__LOG_ERRNO(CTX, LIBXL__LOG_ERROR, "unpausing domain %d", domid);
         rc = ERROR_FAIL;
     }
  out:
+    return rc;
+}
+
+int libxl_domain_unpause(libxl_ctx *ctx, uint32_t domid)
+{
+    GC_INIT(ctx);
+    int rc = libxl__domain_unpause(gc, domid);
+
     GC_FREE;
     return rc;
 }
