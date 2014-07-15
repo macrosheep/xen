@@ -2801,6 +2801,7 @@ _hidden int libxl__netbuffer_enabled(libxl__gc *gc);
 /*----- Domain suspend (save) state structure -----*/
 
 typedef struct libxl__domain_suspend_state libxl__domain_suspend_state;
+typedef struct libxl__domain_suspend_state2 libxl__domain_suspend_state2;
 
 typedef void libxl__domain_suspend_cb(libxl__egc*,
                                       libxl__domain_suspend_state*, int rc);
@@ -2815,6 +2816,29 @@ typedef struct libxl__logdirty_switch {
     libxl__ev_time timeout;
 } libxl__logdirty_switch;
 
+/*
+ * libxl__domain_suspend_state is for saving guest, not
+ * for suspending guest. We need to an independent API
+ * to suspend guest only.
+ */
+struct libxl__domain_suspend_state2 {
+    /* set by caller of libxl__domain_suspend2 */
+    libxl__ao *ao;
+
+    uint32_t domid;
+    libxl__ev_evtchn guest_evtchn;;
+    int guest_evtchn_lockfd;
+    int hvm;
+    const char *dm_savefile;
+    void (*callback_common_done)(libxl__egc*,
+                                 libxl__domain_suspend_state2*, int ok);
+    int save_dm;
+    int guest_responded;
+    libxl__xswait_state pvcontrol;
+    libxl__ev_xswatch guest_watch;
+    libxl__ev_time guest_timeout;
+};
+
 struct libxl__domain_suspend_state {
     /* set by caller of libxl__domain_suspend */
     libxl__ao *ao;
@@ -2827,22 +2851,14 @@ struct libxl__domain_suspend_state {
     int debug;
     const libxl_domain_remus_info *remus;
     /* private */
-    libxl__ev_evtchn guest_evtchn;
-    int guest_evtchn_lockfd;
+    libxl__domain_suspend_state2 dss2;
     int hvm;
     int xcflags;
-    int guest_responded;
-    libxl__xswait_state pvcontrol;
-    libxl__ev_xswatch guest_watch;
-    libxl__ev_time guest_timeout;
-    const char *dm_savefile;
     libxl__remus_devices_state rds;
     libxl__ev_time checkpoint_timeout; /* used for Remus checkpoint */
     int interval; /* checkpoint interval (for Remus) */
     libxl__save_helper_state shs;
     libxl__logdirty_switch logdirty;
-    void (*callback_common_done)(libxl__egc*,
-                                 struct libxl__domain_suspend_state*, int ok);
     /* private for libxl__domain_save_device_model */
     libxl__save_device_model_cb *save_dm_callback;
     libxl__datacopier_state save_dm_datacopier;
@@ -3116,6 +3132,9 @@ struct libxl__domain_create_state {
 
 /*----- Domain suspend (save) functions -----*/
 
+/* calls dss2->callback_common_done when done */
+_hidden void libxl__domain_suspend2(libxl__egc *egc,
+                                    libxl__domain_suspend_state2 *dss2);
 /* calls dss->callback when done */
 _hidden void libxl__domain_suspend(libxl__egc *egc,
                                    libxl__domain_suspend_state *dss);
@@ -3155,7 +3174,7 @@ _hidden void libxl__xc_domain_restore_done(libxl__egc *egc, void *dcs_void,
 
 /* Each time the dm needs to be saved, we must call suspend and then save */
 _hidden int libxl__domain_suspend_device_model(libxl__gc *gc,
-                                           libxl__domain_suspend_state *dss);
+                                           libxl__domain_suspend_state2 *dss2);
 _hidden void libxl__domain_save_device_model(libxl__egc *egc,
                                      libxl__domain_suspend_state *dss,
                                      libxl__save_device_model_cb *callback);
