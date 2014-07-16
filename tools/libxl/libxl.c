@@ -797,9 +797,9 @@ int libxl_domain_remus_start(libxl_ctx *ctx, libxl_domain_remus_info *info,
     libxl__domain_suspend_state *dss;
     int rc;
 
-    if (!info->unsafe && (info->blackhole || !info->netbuf)) {
-        LOG(ERROR, "Unsafe mode must be enabled to replicate to /dev/null and "
-                   "disable network buffering");
+    if (!info->unsafe && (info->blackhole || !info->netbuf || !info->diskbuf)) {
+        LOG(ERROR, "Unsafe mode must be enabled to replicate to /dev/null,"
+                   "disable network buffering and disk replication");
         goto out;
     }
 
@@ -833,7 +833,8 @@ int libxl_domain_remus_start(libxl_ctx *ctx, libxl_domain_remus_info *info,
         rds->device_kind_flags |= LIBXL__REMUS_DEVICE_NIC;
     }
 
-    rds->device_kind_flags |= LIBXL__REMUS_DEVICE_DISK;
+    if (info->diskbuf)
+        rds->device_kind_flags |= LIBXL__REMUS_DEVICE_DISK;
 
     rds->ao = ao;
     rds->egc = egc;
