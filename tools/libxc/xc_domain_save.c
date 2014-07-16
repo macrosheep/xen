@@ -2082,10 +2082,15 @@ int xc_domain_save(xc_interface *xch, int io_fd, uint32_t dom, uint32_t max_iter
  out_rc:
     completed = 1;
 
-    if ( !rc && callbacks->postcopy )
+    /*
+     * COLO: secondary vm is running. We will use the io_fd to
+     * ensure that both primary vm and secondary vm are resumed
+     * at the same time. So we should call postcopy later.
+     */
+    if ( !rc && callbacks->postcopy && !callbacks->get_dirty_pfn )
         callbacks->postcopy(callbacks->data);
 
-    /* guest has been resumed. Now we can compress data
+    /* Remus: guest has been resumed. Now we can compress data
      * at our own pace.
      */
     if (!rc && compressing)
@@ -2112,6 +2117,13 @@ int xc_domain_save(xc_interface *xch, int io_fd, uint32_t dom, uint32_t max_iter
     }
 
     discard_file_cache(xch, io_fd, 1 /* flush */);
+
+    /*
+     * COLO: send qemu device state and resume both
+     * primary vm and secondary vm now.
+     */
+    if ( !rc && callbacks->postcopy && callbacks->get_dirty_pfn )
+        callbacks->postcopy(callbacks->data);
 
     /* Enable compression now, finally */
     compressing = (flags & XCFLAGS_CHECKPOINT_COMPRESS);
