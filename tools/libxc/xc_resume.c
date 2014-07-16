@@ -109,6 +109,23 @@ static int xc_domain_resume_cooperative(xc_interface *xch, uint32_t domid)
     return do_domctl(xch, &domctl);
 }
 
+static int xc_domain_resume_hvm(xc_interface *xch, uint32_t domid)
+{
+    DECLARE_DOMCTL;
+
+    /*
+     * If it is PVHVM, the hypercall return code is 0, because this
+     * is not a fast path resume, we do not modify_returncode as in
+     * xc_domain_resume_cooperative.
+     * (resuming it in a new domain context)
+     *
+     * If it is a HVM, the hypercall is a NOP.
+     */
+    domctl.cmd = XEN_DOMCTL_resumedomain;
+    domctl.domain = domid;
+    return do_domctl(xch, &domctl);
+}
+
 static int xc_domain_resume_any(xc_interface *xch, uint32_t domid)
 {
     DECLARE_DOMCTL;
@@ -138,10 +155,7 @@ static int xc_domain_resume_any(xc_interface *xch, uint32_t domid)
      */
 #if defined(__i386__) || defined(__x86_64__)
     if ( info.hvm )
-    {
-        ERROR("Cannot resume uncooperative HVM guests");
-        return rc;
-    }
+        return xc_domain_resume_hvm(xch, domid);
 
     if ( xc_domain_get_guest_width(xch, domid, &dinfo->guest_width) != 0 )
     {
