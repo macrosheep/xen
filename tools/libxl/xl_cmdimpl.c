@@ -7254,8 +7254,9 @@ int main_remus(int argc, char **argv)
     r_info.blackhole = 0;
     r_info.compression = 1;
     r_info.netbuf = 1;
+    r_info.diskbuf = 1;
 
-    SWITCH_FOREACH_OPT(opt, "Fbuni:s:N:e", NULL, "remus", 2) {
+    SWITCH_FOREACH_OPT(opt, "Fbundi:s:N:e", NULL, "remus", 2) {
     case 'i':
         r_info.interval = atoi(optarg);
         break;
@@ -7274,6 +7275,9 @@ int main_remus(int argc, char **argv)
     case 'N':
         r_info.netbufscript = optarg;
         break;
+    case 'd':
+        r_info.diskbuf = 0;
+        break;
     case 's':
         ssh_command = optarg;
         break;
@@ -7282,9 +7286,10 @@ int main_remus(int argc, char **argv)
         break;
     }
 
-    if (!r_info.unsafe && (r_info.blackhole || !r_info.netbuf)) {
-        perror("Unsafe mode must be enabled to replicate to /dev/null and "
-               "disable network buffering");
+    if (!r_info.unsafe &&
+        (r_info.blackhole || !r_info.netbuf || !r_info.diskbuf)) {
+        perror("Unsafe mode must be enabled to replicate to /dev/null,"
+               "disable network buffering and disk replication");
         exit(-1);
     }
 
