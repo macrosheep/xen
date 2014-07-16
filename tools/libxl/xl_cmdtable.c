@@ -493,12 +493,13 @@ struct cmd_spec cmd_table[] = {
       "                        of the domain.\n"
       "-N <netbufscript>       Use netbufscript to setup network buffering instead of the\n"
       "                        instead of the default (/etc/xen/scripts/remus-netbuf-setup).\n"
-      "-F                      Enable unsafe configurations [-b/-n flags].\n"
+      "-F                      Enable unsafe configurations [-b/-n/-d flags].\n"
       "                        Backup may not recover successfully.\n"
       "                        Use with caution.\n"
       "-b                      Replicate memory checkpoints to /dev/null (blackhole).\n"
       "                        Works only in unsafe mode.\n"
-      "-n                      Disable network output buffering. Works only in unsafe mode."
+      "-n                      Disable network output buffering. Works only in unsafe mode.\n"
+      "-d                      Disable disk buffering. Works only in unsafe mode."
     },
 #endif
     { "devd",

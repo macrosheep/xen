@@ -431,7 +431,7 @@ Enable Remus HA for domain. By default B<xl> relies on ssh as a transport
 mechanism between the two hosts.
 
 N.B: Remus support in xl is still in experimental (proof-of-concept) phase.
-     There is no support for disk buffering at the moment.
+     Disk buffering support is limited to DRBD disks.
 
 B<OPTIONS>
 
@@ -462,7 +462,7 @@ the default (/etc/xen/scripts/remus-netbuf-setup).
 
 =item B<-F>
 
-Enable unsafe configurations [-b/-n flags]. Backup may not recover successfully.
+Enable unsafe configurations [-b/-n/-d flags]. Backup may not recover successfully.
 Use with caution.
 
 =item B<-b>
@@ -474,6 +474,10 @@ Works only in unsafe mode.
 =item B<-n>
 
 Disable network output buffering. Works only in unsafe mode.
+
+=item B<-d>
+
+Disable disk buffering. Works only in unsafe mode.
 
 =back
 
