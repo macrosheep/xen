@@ -7288,8 +7288,9 @@ int main_remus(int argc, char **argv)
     libxl_defbool_setdefault(&r_info.blackhole, false);
     libxl_defbool_setdefault(&r_info.compression, true);
     libxl_defbool_setdefault(&r_info.netbuf, true);
+    libxl_defbool_setdefault(&r_info.diskbuf, true);
 
-    SWITCH_FOREACH_OPT(opt, "Fbuni:s:N:e", NULL, "remus", 2) {
+    SWITCH_FOREACH_OPT(opt, "Fbundi:s:N:e", NULL, "remus", 2) {
     case 'i':
         r_info.interval = atoi(optarg);
         break;
@@ -7308,6 +7309,9 @@ int main_remus(int argc, char **argv)
     case 'N':
         r_info.netbufscript = optarg;
         break;
+    case 'd':
+        libxl_defbool_set(&r_info.diskbuf, false);
+        break;
     case 's':
         ssh_command = optarg;
         break;
@@ -7318,9 +7322,10 @@ int main_remus(int argc, char **argv)
 
     if (!libxl_defbool_val(r_info.unsafe) &&
         (libxl_defbool_val(r_info.blackhole) ||
-         !libxl_defbool_val(r_info.netbuf))) {
-        perror("Unsafe mode must be enabled to replicate to /dev/null and "
-               "disable network buffering");
+         !libxl_defbool_val(r_info.netbuf) ||
+         !libxl_defbool_val(r_info.diskbuf))) {
+        perror("Unsafe mode must be enabled to replicate to /dev/null,"
+               "disable network buffering and disk replication");
         exit(-1);
     }
 
