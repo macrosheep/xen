@@ -16,22 +16,98 @@
 #include "libxl_osdeps.h" /* must come before any other headers */
 
 #include "libxl_internal.h"
+#include <netlink/route/link.h>
+#include <netlink/route/qdisc.h>
 
+extern const libxl__remus_device_instance_ops remus_device_nic;
 static const libxl__remus_device_instance_ops *remus_ops[] = {
+    &remus_device_nic,
     NULL,
 };
 
 /*----- helper functions -----*/
 
+static int init_subkind_nic(libxl__remus_devices_state *rds)
+{
+    int rc, ret;
+
+    STATE_AO_GC(rds->ao);
+
+    rds->nlsock = nl_socket_alloc();
+    if (!rds->nlsock) {
+        LOG(ERROR, "cannot allocate nl socket");
+        rc = ERROR_FAIL;
+        goto out;
+    }
+
+    ret = nl_connect(rds->nlsock, NETLINK_ROUTE);
+    if (ret) {
+        LOG(ERROR, "failed to open netlink socket: %s",
+            nl_geterror(ret));
+        rc = ERROR_FAIL;
+        goto out;
+    }
+
+    /* get list of all qdiscs installed on network devs. */
+    ret = rtnl_qdisc_alloc_cache(rds->nlsock, &rds->qdisc_cache);
+    if (ret) {
+        LOG(ERROR, "failed to allocate qdisc cache: %s",
+            nl_geterror(ret));
+        rc = ERROR_FAIL;
+        goto out;
+    }
+
+    rds->netbufscript = GCSPRINTF("%s/remus-netbuf-setup",
+                                  libxl__xen_script_dir_path());
+
+    rc = 0;
+
+out:
+    return rc;
+}
+
+static void cleanup_subkind_nic(libxl__remus_devices_state *rds)
+{
+    STATE_AO_GC(rds->ao);
+
+    /* free qdisc cache */
+    if (rds->qdisc_cache) {
+        nl_cache_clear(rds->qdisc_cache);
+        nl_cache_free(rds->qdisc_cache);
+        rds->qdisc_cache = NULL;
+    }
+
+    /* close & free nlsock */
+    if (rds->nlsock) {
+        nl_close(rds->nlsock);
+        nl_socket_free(rds->nlsock);
+        rds->nlsock = NULL;
+    }
+}
+
 static int init_device_subkind(libxl__remus_devices_state *rds)
 {
     /* init device subkind-specific state in the libxl ctx */
-    return 0;
+    int rc;
+    STATE_AO_GC(rds->ao);
+
+    if (libxl__netbuffer_enabled(gc)) {
+        rc = init_subkind_nic(rds);
+        if (rc) goto out;
+    }
+
+    rc = 0;
+out:
+    return rc;
 }
 
 static void cleanup_device_subkind(libxl__remus_devices_state *rds)
 {
     /* cleanup device subkind-specific state in the libxl ctx */
+    STATE_AO_GC(rds->ao);
+
+    if (libxl__netbuffer_enabled(gc))
+        cleanup_subkind_nic(rds);
 }
 
 /*----- setup() and teardown() -----*/
