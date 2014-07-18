@@ -2148,9 +2148,15 @@ struct libxl__ao_device {
 /* Starts preparing to add/remove a bunch of devices. */
 _hidden void libxl__multidev_begin(libxl__ao *ao, libxl__multidev*);
 
-/* Prepares to add/remove one of many devices.  Returns a libxl__ao_device
- * which has had libxl__prepare_ao_device called, and which has also
+/* Prepares to handle one of many devices. Which will call
+ * libxl__prepare_ao_device on libxl__ao_device, and will also
  * had ->callback set.  The user should not mess with aodev->callback. */
+_hidden void libxl__multidev_prepare_with_aodev(libxl__multidev*,
+                                                libxl__ao_device*);
+/* A wrapper function of libxl__multidev_prepare_with_aodev. Instead of
+ * taking libxl__ao_device as a parameter, it allocate a libxl__ao_device
+ * and call libxl__multidev_prepare_with_aodev to prepare.
+ * Returns the allocated libxl__ao_device. */
 _hidden libxl__ao_device *libxl__multidev_prepare(libxl__multidev*);
 
 /* Notifies the multidev machinery that we have now finished preparing
