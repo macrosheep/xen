@@ -2606,6 +2606,13 @@ struct libxl__remus_devices_state {
     int num_disks;
 
     libxl__multidev multidev;
+
+    /*----- private for concrete (device-specific) layer only -----*/
+
+    /* private for nic device subkind ops */
+    char *netbufscript;
+    struct nl_sock *nlsock;
+    struct nl_cache *qdisc_cache;
 };
 
 /*
