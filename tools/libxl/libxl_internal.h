@@ -2128,6 +2128,8 @@ struct libxl__ao_device {
     int num_exec;
     /* for calling hotplug scripts */
     libxl__async_exec_state aes;
+    /* for executing functions asynchronously */
+    libxl__ev_child child;
 };
 
 /*
