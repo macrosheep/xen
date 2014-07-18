@@ -20,8 +20,10 @@
 #include <netlink/route/qdisc.h>
 
 extern const libxl__remus_device_instance_ops remus_device_nic;
+extern const libxl__remus_device_instance_ops remus_device_drbd_disk;
 static const libxl__remus_device_instance_ops *remus_ops[] = {
     &remus_device_nic,
+    &remus_device_drbd_disk,
     NULL,
 };
 
@@ -85,6 +87,21 @@ static void cleanup_subkind_nic(libxl__remus_devices_state *rds)
     }
 }
 
+static int init_subkind_drbd_disk(libxl__remus_devices_state *rds)
+{
+    STATE_AO_GC(rds->ao);
+
+    rds->drbd_probe_script = GCSPRINTF("%s/block-drbd-probe",
+                                       libxl__xen_script_dir_path());
+
+    return 0;
+}
+
+static void cleanup_subkind_drbd_disk(libxl__remus_devices_state *rds)
+{
+    return;
+}
+
 static int init_device_subkind(libxl__remus_devices_state *rds)
 {
     /* init device subkind-specific state in the libxl ctx */
@@ -95,6 +112,9 @@ static int init_device_subkind(libxl__remus_devices_state *rds)
         rc = init_subkind_nic(rds);
         if (rc) goto out;
     }
+
+    rc = init_subkind_drbd_disk(rds);
+    if (rc) goto out;
 
     rc = 0;
 out:
@@ -108,6 +128,8 @@ static void cleanup_device_subkind(libxl__remus_devices_state *rds)
 
     if (libxl__netbuffer_enabled(gc))
         cleanup_subkind_nic(rds);
+
+    cleanup_subkind_drbd_disk(rds);
 }
 
 /*----- setup() and teardown() -----*/
