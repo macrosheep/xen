@@ -17,7 +17,9 @@
 
 #include "libxl_internal.h"
 
+extern const libxl__remus_device_subkind_ops remus_device_nic;
 static const libxl__remus_device_subkind_ops *remus_ops[] = {
+    &remus_device_nic,
     NULL,
 };
 
