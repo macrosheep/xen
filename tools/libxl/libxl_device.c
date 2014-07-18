@@ -463,11 +463,10 @@ void libxl__multidev_begin(libxl__ao *ao, libxl__multidev *multidev)
 
 static void multidev_one_callback(libxl__egc *egc, libxl__ao_device *aodev);
 
-libxl__ao_device *libxl__multidev_prepare(libxl__multidev *multidev) {
+void libxl__multidev_prepare_with_aodev(libxl__multidev *multidev,
+                                        libxl__ao_device *aodev) {
     STATE_AO_GC(multidev->ao);
-    libxl__ao_device *aodev;
 
-    GCNEW(aodev);
     aodev->multidev = multidev;
     aodev->callback = multidev_one_callback;
     libxl__prepare_ao_device(ao, aodev);
@@ -477,6 +476,14 @@ libxl__ao_device *libxl__multidev_prepare(libxl__multidev *multidev) {
         GCREALLOC_ARRAY(multidev->array, multidev->allocd);
     }
     multidev->array[multidev->used++] = aodev;
+}
+
+libxl__ao_device *libxl__multidev_prepare(libxl__multidev *multidev) {
+    STATE_AO_GC(multidev->ao);
+    libxl__ao_device *aodev;
+
+    GCNEW(aodev);
+    libxl__multidev_prepare_with_aodev(multidev, aodev);
 
     return aodev;
 }
