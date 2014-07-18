@@ -22,6 +22,8 @@ libxl__device_kind = Enumeration("device_kind", [
     (6, "VKBD"),
     (7, "CONSOLE"),
     (8, "VTPM"),
+    (9, "REMUS_NIC"),
+    (10, "REMUS_DISK"),
     ])
 
 libxl__console_backend = Enumeration("console_backend", [
