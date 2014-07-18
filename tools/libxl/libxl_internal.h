@@ -2561,6 +2561,8 @@ struct libxl__remus_device_instance_ops {
 
 int init_subkind_nic(libxl__remus_devices_state *rds);
 void cleanup_subkind_nic(libxl__remus_devices_state *rds);
+int init_subkind_drbd_disk(libxl__remus_devices_state *rds);
+void cleanup_subkind_drbd_disk(libxl__remus_devices_state *rds);
 
 typedef void libxl__remus_callback(libxl__egc *,
                                    libxl__remus_devices_state *, int rc);
@@ -2604,6 +2606,9 @@ struct libxl__remus_devices_state {
     char *netbufscript;
     struct nl_sock *nlsock;
     struct nl_cache *qdisc_cache;
+
+    /* private for drbd disk subkind ops */
+    char *drbd_probe_script;
 };
 
 /*
