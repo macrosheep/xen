@@ -18,8 +18,10 @@
 #include "libxl_internal.h"
 
 extern const libxl__remus_device_subkind_ops remus_device_nic;
+extern const libxl__remus_device_subkind_ops remus_device_drbd_disk;
 static const libxl__remus_device_subkind_ops *remus_ops[] = {
     &remus_device_nic,
+    &remus_device_drbd_disk,
     NULL,
 };
 

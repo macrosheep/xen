@@ -2608,6 +2608,9 @@ struct libxl__remus_devices_state {
     char *netbufscript;
     struct nl_sock *nlsock;
     struct nl_cache *qdisc_cache;
+
+    /* private for drbd disk subkind ops */
+    char *drbd_probe_script;
 };
 
 /*
