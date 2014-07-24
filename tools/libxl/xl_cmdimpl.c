@@ -7250,12 +7250,16 @@ int main_remus(int argc, char **argv)
     memset(&r_info, 0, sizeof(libxl_domain_remus_info));
     /* Defaults */
     r_info.interval = 200;
+    r_info.unsafe = 0;
     r_info.blackhole = 0;
     r_info.compression = 1;
 
-    SWITCH_FOREACH_OPT(opt, "bui:s:e", NULL, "remus", 2) {
+    SWITCH_FOREACH_OPT(opt, "Fbui:s:e", NULL, "remus", 2) {
     case 'i':
         r_info.interval = atoi(optarg);
+        break;
+    case 'F':
+        r_info.unsafe = 1;
         break;
     case 'b':
         r_info.blackhole = 1;
@@ -7269,6 +7273,11 @@ int main_remus(int argc, char **argv)
     case 'e':
         daemonize = 0;
         break;
+    }
+
+    if (!r_info.unsafe && r_info.blackhole) {
+        perror("Unsafe mode must be enabled to replicate to /dev/null");
+        exit(-1);
     }
 
     domid = find_domain(argv[optind]);
