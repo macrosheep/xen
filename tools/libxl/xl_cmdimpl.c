@@ -7284,12 +7284,16 @@ int main_remus(int argc, char **argv)
     memset(&r_info, 0, sizeof(libxl_domain_remus_info));
     /* Defaults */
     r_info.interval = 200;
+    libxl_defbool_setdefault(&r_info.unsafe, false);
     libxl_defbool_setdefault(&r_info.blackhole, false);
     libxl_defbool_setdefault(&r_info.compression, true);
 
-    SWITCH_FOREACH_OPT(opt, "bui:s:e", NULL, "remus", 2) {
+    SWITCH_FOREACH_OPT(opt, "Fbui:s:e", NULL, "remus", 2) {
     case 'i':
         r_info.interval = atoi(optarg);
+        break;
+    case 'F':
+        libxl_defbool_set(&r_info.unsafe, true);
         break;
     case 'b':
         libxl_defbool_set(&r_info.blackhole, true);
@@ -7303,6 +7307,12 @@ int main_remus(int argc, char **argv)
     case 'e':
         daemonize = 0;
         break;
+    }
+
+    if (!libxl_defbool_val(r_info.unsafe) &&
+        libxl_defbool_val(r_info.blackhole)) {
+        perror("Unsafe mode must be enabled to replicate to /dev/null");
+        exit(-1);
     }
 
     domid = find_domain(argv[optind]);
