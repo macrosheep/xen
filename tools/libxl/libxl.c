@@ -797,6 +797,11 @@ int libxl_domain_remus_start(libxl_ctx *ctx, libxl_domain_remus_info *info,
     libxl__domain_suspend_state *dss;
     int rc;
 
+    if (!info->unsafe && info->blackhole) {
+        LOG(ERROR, "Unsafe mode must be enabled to replicate to /dev/null");
+        goto out;
+    }
+
     libxl_domain_type type = libxl__domain_type(gc, domid);
     if (type == LIBXL_DOMAIN_TYPE_INVALID) {
         rc = ERROR_FAIL;
