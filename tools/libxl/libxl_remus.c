@@ -21,9 +21,11 @@
 
 /*----- remus: setup the environment -----*/
 static void libxl__remus_setup_done(libxl__egc *egc,
-                                    libxl__checkpoint_devices_state *cds, int rc);
+                                    libxl__checkpoint_devices_state *cds,
+                                    int rc);
 static void libxl__remus_setup_failed(libxl__egc *egc,
-                                      libxl__checkpoint_devices_state *cds, int rc);
+                                      libxl__checkpoint_devices_state *cds,
+                                      int rc);
 
 void libxl__remus_setup(libxl__egc *egc,
                         libxl__domain_suspend_state *dss)
@@ -57,7 +59,8 @@ out:
 }
 
 static void libxl__remus_setup_done(libxl__egc *egc,
-                                    libxl__checkpoint_devices_state *cds, int rc)
+                                    libxl__checkpoint_devices_state *cds,
+                                    int rc)
 {
     libxl__domain_suspend_state *dss = CONTAINER_OF(cds, *dss, cds);
     STATE_AO_GC(dss->ao);
@@ -222,7 +225,8 @@ out:
 
 /*----- remus: wait a new checkpoint -----*/
 static void remus_checkpoint_dm_saved(libxl__egc *egc,
-                                      libxl__domain_suspend_state *dss, int rc);
+                                      libxl__domain_suspend_state *dss,
+                                      int rc);
 static void remus_devices_commit_cb(libxl__egc *egc,
                                     libxl__checkpoint_devices_state *cds,
                                     int rc);
