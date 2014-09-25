@@ -2163,7 +2163,8 @@ struct libxl__ao_device {
  * Then zero or more times
  *    libxl__multidev_prepare
  *    libxl__initiate_device_{remove/addition}
- *       (or some other thing which will eventually call aodev->callback)
+ *       (or some other thing which will eventually call
+ *        aodev->callback or libxl__multidev_one_callback)
  * Finally, once
  *    libxl__multidev_prepared
  * which will result (perhaps reentrantly) in one call to
@@ -2175,7 +2176,7 @@ _hidden void libxl__multidev_begin(libxl__ao *ao, libxl__multidev*);
 
 /* Prepares to add/remove one of many devices.
  * Calls libxl__prepare_ao_device on libxl__ao_device argument provided and
- * also sets the aodev->callback.
+ * also sets the aodev->callback (to libxl__multidev_one_callback)
  * The user should not mess with aodev->callback.
  */
 _hidden void libxl__multidev_prepare_with_aodev(libxl__multidev*,
@@ -2186,6 +2187,16 @@ _hidden void libxl__multidev_prepare_with_aodev(libxl__multidev*,
  * Returns the newly allocated libxl__ao_dev.
  */
 _hidden libxl__ao_device *libxl__multidev_prepare(libxl__multidev*);
+
+/* Indicates to multidev that this one device has been processed.
+ * Normally the multidev user does not need to touch this function, as
+ * multidev_prepare will name it in aodev->callback.  However, if you
+ * want to do something more complicated you can set aodev->callback
+ * yourself to something else, so long as you eventually call
+ * libxl__multidev_one_callback.
+ */
+_hidden void libxl__multidev_one_callback(libxl__egc *egc,
+                                          libxl__ao_device *aodev);
 
 /* Notifies the multidev machinery that we have now finished preparing
  * and initiating devices.  multidev->callback may then be called as
