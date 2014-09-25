@@ -171,6 +171,13 @@ static void device_setup_iterate(libxl__egc *egc, libxl__ao_device *aodev)
     do {
         dev->ops = remus_ops[++dev->ops_index];
         if (!dev->ops) {
+            LOG(ERROR,"device not handled by remus"
+                " (backend=%s:%"PRId32"/%"PRId32""
+                " frontend=%s:%"PRId32"/%"PRId32")",
+                libxl__device_kind_to_string(aodev->dev->backend_kind),
+                aodev->dev->backend_domid,aodev->dev->backend_devid,
+                libxl__device_kind_to_string(aodev->dev->kind),
+                aodev->dev->domid,aodev->dev->devid);
             aodev->rc = ERROR_FAIL;
             goto out;
         }
