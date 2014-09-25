@@ -286,7 +286,7 @@ static void setup_async_exec(libxl__remus_device *dev, char *op)
 
 /* setup() and teardown() */
 
-static void nic_setup(libxl__remus_device *dev)
+static void nic_setup(libxl__egc *egc, libxl__remus_device *dev)
 {
     int rc;
     libxl__remus_device_nic *remus_nic;
@@ -391,7 +391,7 @@ out:
     aodev->callback(egc, aodev);
 }
 
-static void nic_teardown(libxl__remus_device *dev)
+static void nic_teardown(libxl__egc *egc, libxl__remus_device *dev)
 {
     int rc;
     STATE_AO_GC(dev->rds->ao);
