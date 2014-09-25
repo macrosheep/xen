@@ -2166,7 +2166,8 @@ struct libxl__ao_device {
  *       (or some other thing which will eventually call aodev->callback)
  * Finally, once
  *    libxl__multidev_prepared
- * which will result (perhaps reentrantly) in one call to callback().
+ * which will result (perhaps reentrantly) in one call to
+ * multidev->callback().
  */
 
 /* Starts preparing to add/remove a bunch of devices. */
@@ -2174,7 +2175,8 @@ _hidden void libxl__multidev_begin(libxl__ao *ao, libxl__multidev*);
 
 /* Prepares to add/remove one of many devices.
  * Calls libxl__prepare_ao_device on libxl__ao_device argument provided and
- * also sets the ->callback. The user should not mess with aodev->callback.
+ * also sets the aodev->callback.
+ * The user should not mess with aodev->callback.
  */
 _hidden void libxl__multidev_prepare_with_aodev(libxl__multidev*,
                                                 libxl__ao_device*);
