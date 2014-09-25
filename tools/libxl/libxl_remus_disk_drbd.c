@@ -42,7 +42,8 @@ void cleanup_subkind_drbd_disk(libxl__remus_devices_state *rds)
 }
 
 /*----- helper functions, for async calls -----*/
-static void drbd_async_call(libxl__remus_device *dev,
+static void drbd_async_call(libxl__egc *egc,
+                            libxl__remus_device *dev,
                             void func(libxl__remus_device *),
                             libxl__ev_child_callback callback)
 {
@@ -69,7 +70,7 @@ static void drbd_async_call(libxl__remus_device *dev,
 
 out:
     aodev->rc = rc;
-    aodev->callback(dev->rds->egc, aodev);
+    aodev->callback(egc, aodev);
 }
 
 /*----- match(), setup() and teardown() -----*/
@@ -83,11 +84,11 @@ static void match_async_exec_cb(libxl__egc *egc,
 
 static void match_async_exec(libxl__egc *egc, libxl__remus_device *dev);
 
-static void drbd_setup(libxl__remus_device *dev)
+static void drbd_setup(libxl__egc *egc, libxl__remus_device *dev)
 {
     STATE_AO_GC(dev->rds->ao);
 
-    match_async_exec(dev->rds->egc, dev);
+    match_async_exec(egc, dev);
 }
 
 static void match_async_exec(libxl__egc *egc, libxl__remus_device *dev)
@@ -166,14 +167,14 @@ out:
     aodev->callback(egc, aodev);
 }
 
-static void drbd_teardown(libxl__remus_device *dev)
+static void drbd_teardown(libxl__egc *egc, libxl__remus_device *dev)
 {
     libxl__remus_drbd_disk *drbd_disk = dev->concrete_data;
     STATE_AO_GC(dev->rds->ao);
 
     close(drbd_disk->ctl_fd);
     dev->aodev.rc = 0;
-    dev->aodev.callback(dev->rds->egc, &dev->aodev);
+    dev->aodev.callback(egc, &dev->aodev);
 }
 
 /*----- checkpointing APIs -----*/
@@ -186,7 +187,7 @@ static void checkpoint_async_call_done(libxl__egc *egc,
 /* API implementations */
 
 /* this op will not wait and block, so implement as sync op */
-static void drbd_postsuspend(libxl__remus_device *dev)
+static void drbd_postsuspend(libxl__egc *egc, libxl__remus_device *dev)
 {
     STATE_AO_GC(dev->rds->ao);
 
@@ -198,17 +199,17 @@ static void drbd_postsuspend(libxl__remus_device *dev)
     }
 
     dev->aodev.rc = 0;
-    dev->aodev.callback(dev->rds->egc, &dev->aodev);
+    dev->aodev.callback(egc, &dev->aodev);
 }
 
 
 static void drbd_preresume_async(libxl__remus_device *dev);
 
-static void drbd_preresume(libxl__remus_device *dev)
+static void drbd_preresume(libxl__egc *egc, libxl__remus_device *dev)
 {
     STATE_AO_GC(dev->rds->ao);
 
-    drbd_async_call(dev, drbd_preresume_async, checkpoint_async_call_done);
+    drbd_async_call(egc, dev, drbd_preresume_async, checkpoint_async_call_done);
 }
 
 static void drbd_preresume_async(libxl__remus_device *dev)
