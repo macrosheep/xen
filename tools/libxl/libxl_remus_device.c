@@ -61,9 +61,11 @@ static void cleanup_device_subkind(libxl__remus_devices_state *rds)
 
 /* callbacks */
 
-static void devices_setup_cb(libxl__egc *egc,
-                             libxl__multidev *multidev,
-                             int rc);
+static void all_devices_setup_cb(libxl__egc *egc,
+                                 libxl__multidev *multidev,
+                                 int rc);
+static void device_setup_iterate(libxl__egc *egc,
+                                 libxl__ao_device *aodev);
 static void devices_teardown_cb(libxl__egc *egc,
                                 libxl__multidev *multidev,
                                 int rc);
@@ -82,7 +84,6 @@ static libxl__remus_device* remus_device_init(libxl__egc *egc,
     dev->backend_dev = libxl_dev;
     dev->kind = kind;
     dev->rds = rds;
-    dev->ops_index = -1;
 
     return dev;
 }
@@ -139,54 +140,60 @@ static void remus_devices_setup(libxl__egc *egc,
                                 libxl__remus_devices_state *rds)
 {
     int i, rc;
-    libxl__remus_device *dev;
 
     STATE_AO_GC(rds->ao);
 
     libxl__multidev_begin(ao, &rds->multidev);
-    rds->multidev.callback = devices_setup_cb;
+    rds->multidev.callback = all_devices_setup_cb;
     for (i = 0; i < rds->num_devices; i++) {
-        dev = rds->devs[i];
-        if (dev->matched)
-            continue;
-
-        /* find avaliable ops */
-        do {
-            dev->ops = remus_ops[++dev->ops_index];
-            if (!dev->ops) {
-                rc = ERROR_REMUS_DEVICE_NOT_SUPPORTED;
-                goto out;
-            }
-        } while (dev->ops->kind != dev->kind);
-
+        libxl__remus_device *dev = rds->devs[i];
+        dev->ops_index = -1;
         libxl__multidev_prepare_with_aodev(&rds->multidev, &dev->aodev);
-        dev->ops->setup(dev);
+
+        dev->aodev.rc = ERROR_REMUS_DEVICE_NOT_SUPPORTED;
+        device_setup_iterate(egc,&dev->aodev);
     }
 
     rc = 0;
-out:
     libxl__multidev_prepared(egc, &rds->multidev, rc);
 }
 
-static void devices_setup_cb(libxl__egc *egc,
-                             libxl__multidev *multidev,
-                             int rc)
+
+static void device_setup_iterate(libxl__egc *egc, libxl__ao_device *aodev)
+{
+    libxl__remus_device *dev = CONTAINER_OF(aodev, *dev, aodev);
+    EGC_GC;
+
+    if (aodev->rc != ERROR_REMUS_DEVICE_NOT_SUPPORTED)
+        /* might be success or disaster */
+        goto out;
+
+    do {
+        dev->ops = remus_ops[++dev->ops_index];
+        if (!dev->ops) {
+            aodev->rc = ERROR_FAIL;
+            goto out;
+        }
+    } while (dev->ops->kind != dev->kind);
+
+    /* found the next ops_index to try */
+    assert(dev->aodev.callback == device_setup_iterate);
+    dev->ops->setup(dev);
+    return;
+
+ out:
+    libxl__multidev_one_callback(egc,aodev);
+}
+
+static void all_devices_setup_cb(libxl__egc *egc,
+                                 libxl__multidev *multidev,
+                                 int rc)
 {
     STATE_AO_GC(multidev->ao);
 
     /* Convenience aliases */
     libxl__remus_devices_state *const rds =
                             CONTAINER_OF(multidev, *rds, multidev);
-
-    /*
-     * if the error is ERROR_REMUS_DEVOPS_DOES_NOT_MATCH, begin next iter
-     * if there are devices that can't be set up, the rc will become
-     * ERROR_FAIL or ERROR_REMUS_DEVICE_NOT_SUPPORTED at last anyway.
-     */
-    if (rc == ERROR_REMUS_DEVOPS_DOES_NOT_MATCH) {
-        remus_devices_setup(egc, rds);
-        return;
-    }
 
     rds->callback(egc, rds, rc);
 }
