@@ -185,7 +185,7 @@ static void device_setup_iterate(libxl__egc *egc, libxl__ao_device *aodev)
 
     /* found the next ops_index to try */
     assert(dev->aodev.callback == device_setup_iterate);
-    dev->ops->setup(dev);
+    dev->ops->setup(egc,dev);
     return;
 
  out:
@@ -221,7 +221,7 @@ void libxl__remus_devices_teardown(libxl__egc *egc,
             continue;
 
         libxl__multidev_prepare_with_aodev(&rds->multidev, &dev->aodev);
-        dev->ops->teardown(dev);
+        dev->ops->teardown(egc,dev);
     }
 
     libxl__multidev_prepared(egc, &rds->multidev, 0);
@@ -284,7 +284,7 @@ void libxl__remus_devices_##api(libxl__egc *egc,                        \
         if (!dev->matched || !dev->ops->api)                            \
             continue;                                                   \
         libxl__multidev_prepare_with_aodev(&rds->multidev, &dev->aodev);\
-        dev->ops->api(dev);                                             \
+        dev->ops->api(egc,dev);                                         \
     }                                                                   \
                                                                         \
     libxl__multidev_prepared(egc, &rds->multidev, 0);                   \

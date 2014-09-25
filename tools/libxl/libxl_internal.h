@@ -2644,9 +2644,9 @@ struct libxl__remus_device_instance_ops {
      * Asynchronous.
      */
 
-    void (*postsuspend)(libxl__remus_device *dev);
-    void (*preresume)(libxl__remus_device *dev);
-    void (*commit)(libxl__remus_device *dev);
+    void (*postsuspend)(libxl__egc *egc, libxl__remus_device *dev);
+    void (*preresume)(libxl__egc *egc, libxl__remus_device *dev);
+    void (*commit)(libxl__egc *egc, libxl__remus_device *dev);
 
     /*
      * setup() and teardown() are refer to the actual remus device.
@@ -2661,8 +2661,8 @@ struct libxl__remus_device_instance_ops {
      * REMUS_DEVOPS_DOES_NOT_MATCH if the ops does not match the device.
      * any other rc indicates failure.
      */
-    void (*setup)(libxl__remus_device *dev);
-    void (*teardown)(libxl__remus_device *dev);
+    void (*setup)(libxl__egc *egc, libxl__remus_device *dev);
+    void (*teardown)(libxl__egc *egc, libxl__remus_device *dev);
 };
 
 int init_subkind_nic(libxl__remus_devices_state *rds);
@@ -2682,7 +2682,6 @@ struct libxl__remus_devices_state {
     /*---- must be set by caller of libxl__remus_device_(setup|teardown) ----*/
 
     libxl__ao *ao;
-    libxl__egc *egc;
     uint32_t domid;
     libxl__remus_callback *callback;
     int device_kind_flags;
