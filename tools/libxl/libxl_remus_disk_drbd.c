@@ -250,7 +250,7 @@ out:
 }
 
 const libxl__remus_device_instance_ops remus_device_drbd_disk = {
-    .kind = LIBXL__DEVICE_KIND_REMUS_DISK,
+    .kind = LIBXL__DEVICE_KIND_VBD,
     .setup = drbd_setup,
     .teardown = drbd_teardown,
     .postsuspend = drbd_postsuspend,

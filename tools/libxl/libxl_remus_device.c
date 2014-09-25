@@ -105,10 +105,10 @@ void libxl__remus_devices_setup(libxl__egc *egc, libxl__remus_devices_state *rds
     rds->num_nics = 0;
     rds->num_disks = 0;
 
-    if (rds->device_kind_flags & (1 << LIBXL__DEVICE_KIND_REMUS_NIC))
+    if (rds->device_kind_flags & (1 << LIBXL__DEVICE_KIND_VIF))
         rds->nics = libxl_device_nic_list(CTX, rds->domid, &rds->num_nics);
 
-    if (rds->device_kind_flags & (1 << LIBXL__DEVICE_KIND_REMUS_DISK))
+    if (rds->device_kind_flags & (1 << LIBXL__DEVICE_KIND_VBD))
         rds->disks = libxl_device_disk_list(CTX, rds->domid, &rds->num_disks);
 
     if (rds->num_nics == 0 && rds->num_disks == 0)
@@ -118,13 +118,13 @@ void libxl__remus_devices_setup(libxl__egc *egc, libxl__remus_devices_state *rds
 
     for (i = 0; i < rds->num_nics; i++) {
         rds->devs[rds->num_devices++] = remus_device_init(egc, rds,
-                                                LIBXL__DEVICE_KIND_REMUS_NIC,
+                                                LIBXL__DEVICE_KIND_VIF,
                                                 &rds->nics[i]);
     }
 
     for (i = 0; i < rds->num_disks; i++) {
         rds->devs[rds->num_devices++] = remus_device_init(egc, rds,
-                                                LIBXL__DEVICE_KIND_REMUS_DISK,
+                                                LIBXL__DEVICE_KIND_VBD,
                                                 &rds->disks[i]);
     }
 

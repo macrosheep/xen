@@ -841,11 +841,11 @@ int libxl_domain_remus_start(libxl_ctx *ctx, libxl_domain_remus_info *info,
             LOG(ERROR, "Remus: No support for network buffering");
             goto out;
         }
-        rds->device_kind_flags |= (1 << LIBXL__DEVICE_KIND_REMUS_NIC);
+        rds->device_kind_flags |= (1 << LIBXL__DEVICE_KIND_VIF);
     }
 
     if (libxl_defbool_val(info->diskbuf))
-        rds->device_kind_flags |= (1 << LIBXL__DEVICE_KIND_REMUS_DISK);
+        rds->device_kind_flags |= (1 << LIBXL__DEVICE_KIND_VBD);
 
     rds->ao = ao;
     rds->domid = domid;
