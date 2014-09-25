@@ -804,13 +804,13 @@ int libxl_domain_remus_start(libxl_ctx *ctx, libxl_domain_remus_info *info,
         goto out;
     }
 
-    libxl_defbool_setdefault(&info->unsafe, false);
+    libxl_defbool_setdefault(&info->allow_unsafe, false);
     libxl_defbool_setdefault(&info->blackhole, false);
     libxl_defbool_setdefault(&info->compression, true);
     libxl_defbool_setdefault(&info->netbuf, true);
     libxl_defbool_setdefault(&info->diskbuf, true);
 
-    if (!libxl_defbool_val(info->unsafe) &&
+    if (!libxl_defbool_val(info->allow_unsafe) &&
         (libxl_defbool_val(info->blackhole) ||
          !libxl_defbool_val(info->netbuf) ||
          !libxl_defbool_val(info->diskbuf))) {

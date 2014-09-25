@@ -7502,7 +7502,7 @@ int main_remus(int argc, char **argv)
         r_info.interval = atoi(optarg);
         break;
     case 'F':
-        libxl_defbool_set(&r_info.unsafe, true);
+        libxl_defbool_set(&r_info.allow_unsafe, true);
         break;
     case 'b':
         libxl_defbool_set(&r_info.blackhole, true);
