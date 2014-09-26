@@ -318,7 +318,7 @@ static void nic_setup(libxl__egc *egc, libxl__remus_device *dev)
 
 out:
     dev->aodev.rc = rc;
-    dev->aodev.callback(dev->rds->egc, &dev->aodev);
+    dev->aodev.callback(egc, &dev->aodev);
 }
 
 /*
@@ -406,7 +406,7 @@ static void nic_teardown(libxl__egc *egc, libxl__remus_device *dev)
 
 out:
     dev->aodev.rc = rc;
-    dev->aodev.callback(dev->rds->egc, &dev->aodev);
+    dev->aodev.callback(egc, &dev->aodev);
 }
 
 static void netbuf_teardown_script_cb(libxl__egc *egc,
@@ -474,7 +474,7 @@ out:
     return rc;
 }
 
-static void nic_postsuspend(libxl__remus_device *dev)
+static void nic_postsuspend(libxl__egc *egc, libxl__remus_device *dev)
 {
     int rc;
     libxl__remus_device_nic *remus_nic = dev->concrete_data;
@@ -484,10 +484,10 @@ static void nic_postsuspend(libxl__remus_device *dev)
     rc = remus_netbuf_op(remus_nic, dev->rds, tc_buffer_start);
 
     dev->aodev.rc = rc;
-    dev->aodev.callback(dev->rds->egc, &dev->aodev);
+    dev->aodev.callback(egc, &dev->aodev);
 }
 
-static void nic_commit(libxl__remus_device *dev)
+static void nic_commit(libxl__egc *egc, libxl__remus_device *dev)
 {
     int rc;
     libxl__remus_device_nic *remus_nic = dev->concrete_data;
@@ -497,7 +497,7 @@ static void nic_commit(libxl__remus_device *dev)
     rc = remus_netbuf_op(remus_nic, dev->rds, tc_buffer_release);
 
     dev->aodev.rc = rc;
-    dev->aodev.callback(dev->rds->egc, &dev->aodev);
+    dev->aodev.callback(egc, &dev->aodev);
 }
 
 const libxl__remus_device_instance_ops remus_device_nic = {
