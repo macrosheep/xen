@@ -501,7 +501,7 @@ static void nic_commit(libxl__egc *egc, libxl__remus_device *dev)
 }
 
 const libxl__remus_device_instance_ops remus_device_nic = {
-    .kind = LIBXL__DEVICE_KIND_REMUS_NIC,
+    .kind = LIBXL__DEVICE_KIND_VIF,
     .setup = nic_setup,
     .teardown = nic_teardown,
     .postsuspend = nic_postsuspend,
