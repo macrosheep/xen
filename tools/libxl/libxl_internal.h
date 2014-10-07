@@ -2729,6 +2729,8 @@ struct libxl__checkpoint_devices_state {
     uint32_t domid;
     libxl__checkpoint_callback *callback;
     int device_kind_flags;
+    /* The ops must be pointer array, and the last ops must be NULL */
+    const libxl__checkpoint_device_instance_ops **ops;
 
     /*----- private for abstract layer only -----*/
 
@@ -2749,16 +2751,6 @@ struct libxl__checkpoint_devices_state {
     int num_disks;
 
     libxl__multidev multidev;
-
-    /*----- private for concrete (device-specific) layer only -----*/
-
-    /* private for nic device subkind ops */
-    char *netbufscript;
-    struct nl_sock *nlsock;
-    struct nl_cache *qdisc_cache;
-
-    /* private for drbd disk subkind ops */
-    char *drbd_probe_script;
 };
 
 /*
@@ -2806,6 +2798,27 @@ _hidden void libxl__checkpoint_devices_preresume(libxl__egc *egc,
                 libxl__checkpoint_devices_state *cds);
 _hidden void libxl__checkpoint_devices_commit(libxl__egc *egc,
                 libxl__checkpoint_devices_state *cds);
+
+/*----- Remus related state structure -----*/
+typedef struct libxl__remus_state libxl__remus_state;
+struct libxl__remus_state {
+    /* private */
+    libxl__ev_time checkpoint_timeout; /* used for Remus checkpoint */
+    int interval; /* checkpoint interval */
+
+    /* abstract layer */
+    libxl__checkpoint_devices_state cds;
+
+    /*----- private for concrete (device-specific) layer only -----*/
+    /* private for nic device subkind ops */
+    char *netbufscript;
+    struct nl_sock *nlsock;
+    struct nl_cache *qdisc_cache;
+
+    /* private for drbd disk subkind ops */
+    char *drbd_probe_script;
+};
+
 _hidden int libxl__netbuffer_enabled(libxl__gc *gc);
 
 /*----- Domain suspend (save) state structure -----*/
@@ -2869,9 +2882,7 @@ struct libxl__domain_suspend_state {
     libxl__domain_suspend_state2 dss2;
     int hvm;
     int xcflags;
-    libxl__checkpoint_devices_state cds;
-    libxl__ev_time checkpoint_timeout; /* used for Remus checkpoint */
-    int interval; /* checkpoint interval (for Remus) */
+    libxl__remus_state rs;
     libxl__save_helper_state shs;
     libxl__logdirty_switch logdirty;
     /* private for libxl__domain_save_device_model */

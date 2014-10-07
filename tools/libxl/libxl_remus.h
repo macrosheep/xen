@@ -16,10 +16,9 @@
 #ifndef LIBXL_REMUS_H
 #define LIBXL_REMUS_H
 
-void libxl__remus_setup(libxl__egc *egc,
-                        libxl__domain_suspend_state *dss);
+void libxl__remus_setup(libxl__egc *egc, libxl__remus_state *rs);
 void libxl__remus_teardown(libxl__egc *egc,
-                           libxl__domain_suspend_state *dss,
+                           libxl__remus_state *rs,
                            int rc);
 void libxl__remus_domain_suspend_callback(void *data);
 void libxl__remus_domain_resume_callback(void *data);

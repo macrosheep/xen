@@ -1821,7 +1821,6 @@ void libxl__domain_suspend(libxl__egc *egc, libxl__domain_suspend_state *dss)
     dss2->save_dm = 1;
 
     if (r_info != NULL) {
-        dss->interval = r_info->interval;
         if (libxl_defbool_val(r_info->compression))
             dss->xcflags |= XCFLAGS_CHECKPOINT_COMPRESS;
     }
@@ -2007,7 +2006,7 @@ static void domain_suspend_done(libxl__egc *egc,
                            dss2->guest_evtchn.port, &dss2->guest_evtchn_lockfd);
 
     if (dss->remus) {
-        libxl__remus_teardown(egc, dss, rc);
+        libxl__remus_teardown(egc, &dss->rs, rc);
         return;
     }
 
