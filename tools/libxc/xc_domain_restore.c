@@ -1501,6 +1501,7 @@ int xc_domain_restore(xc_interface *xch, int io_fd, uint32_t dom,
     struct restore_ctx _ctx;
     struct restore_ctx *ctx = &_ctx;
     struct domain_info_context *dinfo = &ctx->dinfo;
+    int skip_clear_ioreq_page = 0;
 
     DPRINTF("%s: starting restore of new domid %u", __func__, dom);
 
@@ -2331,12 +2332,29 @@ new_checkpoint:
     }
 
     /* These comms pages need to be zeroed at the start of day */
-    if ( xc_clear_domain_page(xch, dom, tailbuf.u.hvm.magicpfns[0]) ||
-         xc_clear_domain_page(xch, dom, tailbuf.u.hvm.magicpfns[1]) ||
-         xc_clear_domain_page(xch, dom, tailbuf.u.hvm.magicpfns[2]) )
+    if ( xc_clear_domain_page(xch, dom, tailbuf.u.hvm.magicpfns[2]) )
     {
         PERROR("error zeroing magic pages");
         goto out;
+    }
+    if ( !skip_clear_ioreq_page )
+    {
+        if ( xc_clear_domain_page(xch, dom, tailbuf.u.hvm.magicpfns[0]) ||
+             xc_clear_domain_page(xch, dom, tailbuf.u.hvm.magicpfns[1]) )
+        {
+            PERROR("error zeroing magic pages");
+            goto out;
+        }
+        /*
+         * ioreq page contains evtchn which will be set when we resume the
+         * secondary vm the first time. The hypervisor will check if the
+         * evtchn is corrupted, so we cann't clear the ioreq page more
+         * than one time.
+         *
+         * The ioreq->state is always STATE_IOREQ_NONE after the vm is
+         * suspended, so it is OK if we only clear it one time.
+         */
+        skip_clear_ioreq_page = 1;
     }
 
     if ( (frc = xc_hvm_param_set(xch, dom,
