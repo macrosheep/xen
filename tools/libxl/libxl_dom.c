@@ -1299,6 +1299,32 @@ int libxl__domain_suspend_device_model(libxl__gc *gc,
     return ret;
 }
 
+int libxl__domain_restore_device_model(libxl__gc *gc, uint32_t domid)
+{
+    char *state_file;
+    int rc;
+
+    switch (libxl__device_model_version_running(gc, domid)) {
+    case LIBXL_DEVICE_MODEL_VERSION_QEMU_XEN_TRADITIONAL:
+        /* not supported now */
+        return ERROR_FAIL;
+    case LIBXL_DEVICE_MODEL_VERSION_QEMU_XEN:
+        /*
+         * This function may be called too many times for the same gc,
+         * so we use NOGC, and free the memory before return to avoid
+         * OOM.
+         */
+        state_file = libxl__sprintf(NOGC,
+                                    XC_DEVICE_MODEL_RESTORE_FILE".%d",
+                                    domid);
+        rc = libxl__qmp_restore(gc, domid, state_file);
+        free(state_file);
+        return rc;
+    default:
+        return ERROR_INVAL;
+    }
+}
+
 int libxl__domain_resume_device_model(libxl__gc *gc, uint32_t domid)
 {
 

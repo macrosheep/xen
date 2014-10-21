@@ -510,6 +510,24 @@ int libxl_domain_rename(libxl_ctx *ctx, uint32_t domid,
     return rc;
 }
 
+int libxl__domain_restore(libxl__gc *gc, uint32_t domid)
+{
+    int rc = 0;
+
+    libxl_domain_type type = libxl__domain_type(gc, domid);
+    if (type != LIBXL_DOMAIN_TYPE_HVM) {
+        rc = ERROR_FAIL;
+        goto out;
+    }
+
+    rc = libxl__domain_restore_device_model(gc, domid);
+    if (rc)
+        LOG(ERROR, "failed to restore device mode for domain %u:%d",
+            domid, rc);
+out:
+    return rc;
+}
+
 int libxl__domain_resume(libxl__gc *gc, uint32_t domid, int suspend_cancel)
 {
     int rc = 0;
