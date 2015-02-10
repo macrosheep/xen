@@ -2161,6 +2161,8 @@ void libxl__async_exec_init(libxl__async_exec_state *aes);
 int libxl__async_exec_start(libxl__gc *gc, libxl__async_exec_state *aes);
 bool libxl__async_exec_inuse(const libxl__async_exec_state *aes);
 
+void libxl__kill(libxl__gc *gc, pid_t pid, int sig, const char *what);
+
 /*----- device addition/removal -----*/
 
 typedef struct libxl__ao_device libxl__ao_device;

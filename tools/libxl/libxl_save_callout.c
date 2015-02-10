@@ -253,9 +253,7 @@ static void helper_failed(libxl__egc *egc, libxl__save_helper_state *shs,
         return;
     }
 
-    int r = kill(shs->child.pid, SIGKILL);
-    if (r) LOGE(WARN, "failed to kill save/restore helper [%lu]",
-                (unsigned long)shs->child.pid);
+    libxl__kill(gc, shs->child.pid, SIGKILL, "save/restore helper");
 }
 
 static void helper_stdout_readable(libxl__egc *egc, libxl__ev_fd *ev,
