@@ -18,7 +18,10 @@
 #include "libxl_internal.h"
 #include "libxl_colo.h"
 
+extern const libxl__checkpoint_device_instance_ops colo_save_device_qdisk;
+
 static const libxl__checkpoint_device_instance_ops *colo_ops[] = {
+    &colo_save_device_qdisk,
     NULL,
 };
 
@@ -29,7 +32,11 @@ static int init_device_subkind(libxl__checkpoint_devices_state *cds)
     int rc;
     STATE_AO_GC(cds->ao);
 
+    rc = init_subkind_qdisk(cds);
+    if (rc) goto out;
+
     rc = 0;
+out:
     return rc;
 }
 
@@ -37,6 +44,8 @@ static void cleanup_device_subkind(libxl__checkpoint_devices_state *cds)
 {
     /* cleanup device subkind-specific state in the libxl ctx */
     STATE_AO_GC(cds->ao);
+
+    cleanup_subkind_qdisk(cds);
 }
 
 /* ================= colo: setup save environment ================= */
@@ -64,9 +73,11 @@ void libxl__colo_save_setup(libxl__egc *egc, libxl__colo_save_state *css)
     css->send_fd = dss->fd;
     css->recv_fd = dss->recv_fd;
     css->svm_running = false;
+    css->paused = true;
+    css->qdisk_setuped = false;
 
-    /* TODO: disk/nic support */
-    cds->device_kind_flags = 0;
+    /* TODO: nic support */
+    cds->device_kind_flags = (1 << LIBXL__DEVICE_KIND_VBD);
     cds->ops = colo_ops;
     cds->callback = colo_save_setup_done;
     cds->ao = ao;
@@ -452,10 +463,31 @@ static void colo_preresume_cb(libxl__egc *egc,
         goto out;
     }
 
+    if (!css->paused) {
+        rc = colo_qdisk_preresume(CTX, dss->domid);
+        if (rc) {
+            LOG(ERROR, "colo_qdisk_preresume() fails");
+            goto out;
+        }
+    }
+
     /* Resumes the domain and the device model */
     if (libxl__domain_resume(gc, dss->domid, /* Fast Suspend */1)) {
         LOG(ERROR, "cannot resume primary vm");
         goto out;
+    }
+
+    /*
+     * The guest should be paused before doing colo because there is
+     * no disk migration.
+     */
+    if (css->paused) {
+        rc = libxl__domain_unpause(gc, dss->domid);
+        if (rc) {
+            LOG(ERROR, "cannot unpause primary vm");
+            goto out;
+        }
+        css->paused = false;
     }
 
     /* read LIBXL_COLO_SVM_RESUMED */
