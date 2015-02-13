@@ -1710,6 +1710,14 @@ _hidden int libxl__qmp_set_global_dirty_log(libxl__gc *gc, int domid, bool enabl
 _hidden int libxl__qmp_insert_cdrom(libxl__gc *gc, int domid, const libxl_device_disk *disk);
 /* Add a virtual CPU */
 _hidden int libxl__qmp_cpu_add(libxl__gc *gc, int domid, int index);
+/* Start block replication */
+_hidden int libxl__qmp_block_start_replication(libxl__gc *gc, int domid,
+                                               bool primary, const char *addr);
+/* Do block checkpoint */
+_hidden int libxl__qmp_block_do_checkpoint(libxl__gc *gc, int domid);
+/* Stop block replication */
+_hidden int libxl__qmp_block_stop_replication(libxl__gc *gc, int domid,
+                                              bool primary);
 /* close and free the QMP handler */
 _hidden void libxl__qmp_close(libxl__qmp_handler *qmp);
 /* remove the socket file, if the file has already been removed,
@@ -2825,6 +2833,9 @@ int init_subkind_nic(libxl__checkpoint_devices_state *cds);
 void cleanup_subkind_nic(libxl__checkpoint_devices_state *cds);
 int init_subkind_drbd_disk(libxl__checkpoint_devices_state *cds);
 void cleanup_subkind_drbd_disk(libxl__checkpoint_devices_state *cds);
+int init_subkind_qdisk(libxl__checkpoint_devices_state *cds);
+void cleanup_subkind_qdisk(libxl__checkpoint_devices_state *cds);
+int colo_qdisk_preresume(libxl_ctx *ctx, domid_t domid);
 
 typedef void libxl__checkpoint_callback(libxl__egc *,
                                         libxl__checkpoint_devices_state *,
@@ -3044,6 +3055,10 @@ struct libxl__colo_save_state {
     libxl__stream_read_state srs;
     void (*callback)(libxl__egc *, libxl__colo_save_state *, int);
     bool svm_running;
+    bool paused;
+
+    /* private, used by qdisk block replication */
+    bool qdisk_setuped;
 };
 
 /*----- Domain suspend (save) state structure -----*/
@@ -3441,6 +3456,9 @@ struct libxl__colo_restore_state {
     libxl__domain_create_cb *saved_cb;
     void *crcs;
     libxl__checkpoint_devices_state cds;
+
+    /* private, used by qdisk block replication */
+    bool qdisk_setuped;
 };
 
 struct libxl__domain_create_state {

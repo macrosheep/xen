@@ -977,6 +977,37 @@ int libxl__qmp_cpu_add(libxl__gc *gc, int domid, int idx)
     return qmp_run_command(gc, domid, "cpu-add", args, NULL, NULL);
 }
 
+int libxl__qmp_block_start_replication(libxl__gc *gc, int domid,
+                                       bool primary, const char *addr)
+{
+    libxl__json_object *args = NULL;
+
+    qmp_parameters_add_bool(gc, &args, "enable", true);
+    qmp_parameters_add_bool(gc, &args, "primary", primary);
+    if (!primary)
+        qmp_parameters_add_string(gc, &args, "addr", addr);
+
+    return qmp_run_command(gc, domid, "xen-set-block-replication", args,
+                           NULL, NULL);
+}
+
+int libxl__qmp_block_do_checkpoint(libxl__gc *gc, int domid)
+{
+    return qmp_run_command(gc, domid, "xen-do-block-checkpoint", NULL,
+                           NULL, NULL);
+}
+
+int libxl__qmp_block_stop_replication(libxl__gc *gc, int domid, bool primary)
+{
+    libxl__json_object *args = NULL;
+
+    qmp_parameters_add_bool(gc, &args, "enable", false);
+    qmp_parameters_add_bool(gc, &args, "primary", primary);
+
+    return qmp_run_command(gc, domid, "xen-set-block-replication", args,
+                           NULL, NULL);
+}
+
 int libxl__qmp_initializations(libxl__gc *gc, uint32_t domid,
                                const libxl_domain_config *guest_config)
 {
