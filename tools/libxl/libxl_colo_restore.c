@@ -49,7 +49,10 @@ static void libxl__colo_restore_domain_checkpoint_callback(void *data);
 static void libxl__colo_restore_domain_should_checkpoint_callback(void *data);
 static void libxl__colo_restore_domain_suspend_callback(void *data);
 
+extern const libxl__checkpoint_device_instance_ops colo_restore_device_qdisk;
+
 static const libxl__checkpoint_device_instance_ops *colo_restore_ops[] = {
+    &colo_restore_device_qdisk,
     NULL,
 };
 
@@ -148,7 +151,11 @@ static int init_device_subkind(libxl__checkpoint_devices_state *cds)
     int rc;
     STATE_AO_GC(cds->ao);
 
+    rc = init_subkind_qdisk(cds);
+    if (rc)  goto out;
+
     rc = 0;
+out:
     return rc;
 }
 
@@ -156,6 +163,8 @@ static void cleanup_device_subkind(libxl__checkpoint_devices_state *cds)
 {
     /* cleanup device subkind-specific state in the libxl ctx */
     STATE_AO_GC(cds->ao);
+
+    cleanup_subkind_qdisk(cds);
 }
 
 
@@ -215,6 +224,7 @@ void libxl__colo_restore_setup(libxl__egc *egc,
     GCNEW(crcs);
     crs->crcs = crcs;
     crcs->crs = crs;
+    crs->qdisk_setuped = false;
 
     /* setup dsps */
     crcs->dsps.ao = ao;
@@ -518,6 +528,12 @@ static void colo_restore_preresume_cb(libxl__egc *egc,
         goto out;
     }
 
+    rc = colo_qdisk_preresume(CTX, crs->domid);
+    if (rc) {
+        LOG(ERROR, "colo_qdisk_preresume() fails");
+        goto out;
+    }
+
     colo_restore_resume_vm(egc, crcs);
 
     return;
@@ -673,8 +689,8 @@ static void colo_setup_checkpoint_devices(libxl__egc *egc,
 
     STATE_AO_GC(crs->ao);
 
-    /* TODO: disk/nic support */
-    cds->device_kind_flags = 0;
+    /* TODO: nic support */
+    cds->device_kind_flags = (1 << LIBXL__DEVICE_KIND_VBD);
     cds->callback = colo_restore_setup_cds_done;
     cds->ao = ao;
     cds->domid = crs->domid;
