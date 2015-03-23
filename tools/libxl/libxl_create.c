@@ -19,6 +19,7 @@
 
 #include "libxl_internal.h"
 #include "libxl_arch.h"
+#include "libxl_colo.h"
 
 #include <xc_dom.h>
 #include <xenguest.h>
@@ -996,6 +997,93 @@ static void domcreate_console_available(libxl__egc *egc,
                                         dcs->aop_console_how.for_event));
 }
 
+static void libxl__colo_restore_teardown_done(libxl__egc *egc,
+                                              libxl__colo_restore_state *crs,
+                                              int rc)
+{
+    libxl__domain_create_state *dcs = CONTAINER_OF(crs, *dcs, crs);
+    STATE_AO_GC(crs->ao);
+
+    /* convenience aliases */
+    libxl__save_helper_state *const shs = &dcs->shs;
+    const int domid = crs->domid;
+    const libxl_ctx *const ctx = libxl__gc_owner(gc);
+    xc_interface *const xch = ctx->xch;
+
+    if (!rc)
+        /* failover, no need to destroy the secondary vm */
+        goto out;
+
+    if (shs->retval)
+        /*
+         * shs->retval stores the return value of xc_domain_restore().
+         * If it is not 0, we have destroyed the secondary vm in
+         * xc_domain_restore();
+         */
+        goto out;
+
+    xc_domain_destroy(xch, domid);
+
+out:
+    dcs->callback(egc, dcs, rc, crs->domid);
+}
+
+void libxl__colo_restore_done(libxl__egc *egc, void *dcs_void,
+                              int ret, int retval, int errnoval)
+{
+    libxl__domain_create_state *dcs = dcs_void;
+    int rc = 1;
+
+    /* convenience aliases */
+    libxl__colo_restore_state *const crs = &dcs->crs;
+    STATE_AO_GC(crs->ao);
+
+    /* teardown and failover */
+    crs->callback = libxl__colo_restore_teardown_done;
+
+    if (ret == 0 && retval == 0)
+        rc = 0;
+
+    LOG(INFO, "%s", rc ? "colo fails" : "failover");
+    libxl__colo_restore_teardown(egc, crs, rc);
+}
+
+static void libxl__colo_restore_cp_done(libxl__egc *egc,
+                                        libxl__colo_restore_state *crs,
+                                        int rc)
+{
+    libxl__domain_create_state *dcs = CONTAINER_OF(crs, *dcs, crs);
+    int ok = 0;
+
+    /* convenience aliases */
+    libxl__save_helper_state *const shs = &dcs->shs;
+
+    if (!rc)
+        ok = 1;
+
+    libxl__xc_domain_saverestore_async_callback_done(shs->egc, shs, ok);
+}
+
+static void libxl__colo_restore_setup_done(libxl__egc *egc,
+                                           libxl__colo_restore_state *crs,
+                                           int rc)
+{
+    libxl__domain_create_state *dcs = CONTAINER_OF(crs, *dcs, crs);
+
+    /* convenience aliases */
+    STATE_AO_GC(crs->ao);
+
+    if (rc) {
+        LOG(ERROR, "colo restore setup fails: %d", rc);
+        libxl__xc_domain_restore_done(egc, dcs, rc, 0, 0);
+        return;
+    }
+
+    crs->callback = libxl__colo_restore_cp_done;
+    /*TODO COLO*/
+    libxl__stream_read_start(egc, &dcs->srs);
+}
+
 static void domcreate_bootloader_done(libxl__egc *egc,
                                       libxl__bootloader_state *bl,
                                       int rc)
@@ -1010,6 +1098,9 @@ static void domcreate_bootloader_done(libxl__egc *egc,
     libxl__domain_build_state *const state = &dcs->build_state;
     libxl__srm_restore_autogen_callbacks *const callbacks =
         &dcs->shs.callbacks.restore.a;
+    const int checkpointed_stream = dcs->restore_params.checkpointed_stream;
+    libxl__colo_restore_state *const crs = &dcs->crs;
+    libxl_domain_build_info *const info = &d_config->b_info;
 
     if (rc) {
         domcreate_rebuild_done(egc, dcs, rc);
@@ -1039,6 +1130,13 @@ static void domcreate_bootloader_done(libxl__egc *egc,
     /* Restore */
     callbacks->checkpoint = libxl__remus_domain_restore_checkpoint_callback;
 
+    /* COLO only supports HVM now */
+    if (info->type != LIBXL_DOMAIN_TYPE_HVM &&
+        checkpointed_stream == LIBXL_CHECKPOINTED_STREAM_COLO) {
+        rc = ERROR_FAIL;
+        goto out;
+    }
+
     rc = libxl__build_pre(gc, domid, d_config, state);
     if (rc)
         goto out;
@@ -1049,7 +1147,18 @@ static void domcreate_bootloader_done(libxl__egc *egc,
     dcs->srs.back_channel = false;
     dcs->srs.completion_callback = domcreate_stream_done;
 
-    libxl__stream_read_start(egc, &dcs->srs);
+    /* colo restore setup */
+    if (checkpointed_stream == LIBXL_CHECKPOINTED_STREAM_COLO) {
+        crs->ao = ao;
+        crs->domid = domid;
+        crs->send_fd = dcs->send_fd;
+        crs->recv_fd = restore_fd;
+        crs->hvm = (info->type == LIBXL_DOMAIN_TYPE_HVM);
+        crs->callback = libxl__colo_restore_setup_done;
+        libxl__colo_restore_setup(egc, crs);
+    } else
+        libxl__stream_read_start(egc, &dcs->srs);
+
     return;
 
  out:
