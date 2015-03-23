@@ -74,6 +74,18 @@ struct save_callbacks {
      */
     int (*toolstack_save)(uint32_t domid, uint8_t **buf, uint32_t *len, void *data);
 
+    /* Called after the guest is suspended.
+     *
+     * returns the list of dirty pfn:
+     *  struct {
+     *      uint64_t count;
+     *      uint64_t pfn[];
+     *  };
+     *
+     *  Note: the caller must free the return value.
+     */
+    uint8_t *(*get_dirty_pfn)(void *data);
+
     /* to be provided as the last argument to each callback function */
     void* data;
 };

@@ -36,6 +36,7 @@ our @msgs = (
                                               'unsigned long', 'console_mfn'] ],
     [  9, 'srW',    "complete",              [qw(int retval
                                                  int errnoval)] ],
+    [ 10, 'scxAB',  "get_dirty_pfn", [] ],
 );
 
 #----------------------------------------

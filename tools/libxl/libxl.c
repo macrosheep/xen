@@ -18,6 +18,7 @@
 
 #include "libxl_internal.h"
 #include "libxl_remus.h"
+#include "libxl_colo.h"
 
 #define PAGE_TO_MEMKB(pages) ((pages) * 4)
 #define BACKEND_STRING_SIZE 5
@@ -892,7 +893,10 @@ int libxl_domain_remus_start(libxl_ctx *ctx, libxl_domain_remus_info *info,
     assert(info);
 
     /* Point of no return */
-    libxl__remus_setup(egc, &dss->rs);
+    if (libxl_defbool_val(info->colo))
+        libxl__colo_save_setup(egc, &dss->css);
+    else
+        libxl__remus_setup(egc, &dss->rs);
     return AO_INPROGRESS;
 
  out:

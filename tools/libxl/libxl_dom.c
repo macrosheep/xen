@@ -20,6 +20,7 @@
 #include "libxl_internal.h"
 #include "libxl_arch.h"
 #include "libxl_remus.h"
+#include "libxl_colo.h"
 
 #include <xc_dom.h>
 #include <xen/hvm/hvm_info_table.h>
@@ -1843,7 +1844,12 @@ void libxl__domain_suspend(libxl__egc *egc, libxl__domain_suspend_state *dss)
     }
 
     memset(callbacks, 0, sizeof(*callbacks));
-    if (r_info != NULL) {
+    if (r_info != NULL && libxl_defbool_val(r_info->colo)) {
+        callbacks->suspend = libxl__colo_save_domain_suspend_callback;
+        callbacks->postcopy = libxl__colo_save_domain_resume_callback;
+        callbacks->checkpoint = libxl__colo_save_domain_checkpoint_callback;
+        callbacks->get_dirty_pfn = libxl__colo_save_get_dirty_pfn_callback;
+    } else if (r_info != NULL) {
         callbacks->suspend = libxl__remus_domain_suspend_callback;
         callbacks->postcopy = libxl__remus_domain_resume_callback;
         callbacks->checkpoint = libxl__remus_domain_checkpoint_callback;
@@ -2005,7 +2011,10 @@ static void domain_suspend_done(libxl__egc *egc,
         xc_suspend_evtchn_release(CTX->xch, CTX->xce, domid,
                            dss2->guest_evtchn.port, &dss2->guest_evtchn_lockfd);
 
-    if (dss->remus) {
+    if (dss->remus && libxl_defbool_val(dss->remus->colo)) {
+        libxl__colo_save_teardown(egc, &dss->css, rc);
+        return;
+    } else if (dss->remus) {
         libxl__remus_teardown(egc, &dss->rs, rc);
         return;
     }
