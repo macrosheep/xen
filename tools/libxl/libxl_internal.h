@@ -3407,6 +3407,24 @@ libxl__stream_read_inuse(const libxl__stream_read_state *stream)
     return stream->running;
 }
 
+/* colo related structure */
+typedef struct libxl__colo_restore_state libxl__colo_restore_state;
+typedef void libxl__colo_callback(libxl__egc *,
+                                  libxl__colo_restore_state *, int rc);
+struct libxl__colo_restore_state {
+    /* must set by caller of libxl__colo_(setup|teardown) */
+    libxl__ao *ao;
+    uint32_t domid;
+    int send_fd;
+    int recv_fd;
+    int hvm;
+    libxl__colo_callback *callback;
+
+    /* private, colo restore checkpoint state */
+    libxl__domain_create_cb *saved_cb;
+    void *crcs;
+    libxl__checkpoint_devices_state cds;
+};
 
 struct libxl__domain_create_state {
     /* filled in by user */
@@ -3421,6 +3439,7 @@ struct libxl__domain_create_state {
     /* private to domain_create */
     int guest_domid;
     libxl__domain_build_state build_state;
+    libxl__colo_restore_state crs;
     libxl__bootloader_state bl;
     libxl__stub_dm_spawn_state dmss;
         /* If we're not doing stubdom, we use only dmss.dm,

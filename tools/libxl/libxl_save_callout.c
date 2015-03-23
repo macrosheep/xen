@@ -15,6 +15,7 @@
 #include "libxl_osdeps.h"
 
 #include "libxl_internal.h"
+#include "libxl_colo.h"
 
 /* stream_fd is as from the caller (eventually, the application).
  * It may be 0, 1 or 2, in which case we need to dup it elsewhere.
@@ -68,7 +69,11 @@ void libxl__xc_domain_restore(libxl__egc *egc, libxl__domain_create_state *dcs,
     shs->ao = ao;
     shs->domid = domid;
     shs->recv_callback = libxl__srm_callout_received_restore;
-    shs->completion_callback = libxl__xc_domain_restore_done;
+    if (dcs->restore_params.checkpointed_stream ==
+                                                LIBXL_CHECKPOINTED_STREAM_COLO)
+        shs->completion_callback = libxl__colo_restore_done;
+    else
+        shs->completion_callback = libxl__xc_domain_restore_done;
     shs->caller_state = dcs;
     shs->need_results = 1;
     shs->toolstack_data_file = 0;
