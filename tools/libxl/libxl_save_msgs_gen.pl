@@ -24,9 +24,9 @@ our @msgs = (
                                                  STRING doing_what),
                                                 'unsigned long', 'done',
                                                 'unsigned long', 'total'] ],
-    [  3, 'scxA',   "suspend", [] ],
-    [  4, 'scxA',   "postcopy", [] ],
-    [  5, 'scxA',   "checkpoint", [] ],
+    [  3, 'srcxA',   "suspend", [] ],
+    [  4, 'srcxA',   "postcopy", [] ],
+    [  5, 'srcxA',   "checkpoint", [] ],
     [  6, 'scxA',   "switch_qemu_logdirty",  [qw(int domid
                                               unsigned enable)] ],
     #                toolstack_save          done entirely `by hand'

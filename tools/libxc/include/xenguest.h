@@ -93,6 +93,26 @@ int xc_domain_save(xc_interface *xch, int io_fd, uint32_t dom, uint32_t max_iter
 
 /* callbacks provided by xc_domain_restore */
 struct restore_callbacks {
+    /* Called after a new checkpoint to suspend the guest.
+     */
+    int (*suspend)(void* data);
+
+    /* Called after the secondary vm is ready to resume.
+     * Callback function resumes the guest & the device model,
+     *  returns to xc_domain_restore.
+     */
+    int (*postcopy)(void* data);
+
+    /* callback to wait a new checkpoint
+     *
+     * returns:
+     * 0: terminate checkpointing gracefully
+     * 1: take another checkpoint */
+    int (*checkpoint)(void* data);
+
+    /* Enable qemu-dm logging dirty pages to xen */
+    int (*switch_qemu_logdirty)(int domid, unsigned enable, void *data); /* HVM only */
+
     /* callback to restore toolstack specific data */
     int (*toolstack_restore)(uint32_t domid, const uint8_t *buf,
             uint32_t size, void* data);
