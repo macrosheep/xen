@@ -46,7 +46,7 @@ static void switch_logdirty_xswatch(libxl__egc *egc, libxl__ev_xswatch*,
 static void switch_logdirty_done(libxl__egc *egc,
                                  libxl__logdirty_switch *lds, int ok);
 
-static void logdirty_init(libxl__logdirty_switch *lds)
+void logdirty_init(libxl__logdirty_switch *lds)
 {
     lds->cmd_path = 0;
     libxl__ev_xswatch_init(&lds->watch);
