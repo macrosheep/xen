@@ -16,17 +16,6 @@
 #ifndef LIBXL_COLO_H
 #define LIBXL_COLO_H
 
-/*
- * values to control suspend/resume primary vm and secondary vm
- * at the same time
- */
-enum {
-    LIBXL_COLO_NEW_CHECKPOINT = 1,
-    LIBXL_COLO_SVM_SUSPENDED,
-    LIBXL_COLO_SVM_READY,
-    LIBXL_COLO_SVM_RESUMED,
-};
-
 extern void libxl__colo_restore_done(libxl__egc *egc, void *dcs_void,
                                      int ret, int retval, int errnoval);
 extern void libxl__colo_restore_setup(libxl__egc *egc,
@@ -34,5 +23,15 @@ extern void libxl__colo_restore_setup(libxl__egc *egc,
 extern void libxl__colo_restore_teardown(libxl__egc *egc,
                                          libxl__colo_restore_state *crs,
                                          int rc);
+
+extern void libxl__colo_save_domain_suspend_callback(void *data);
+extern void libxl__colo_save_domain_checkpoint_callback(void *data);
+extern void libxl__colo_save_domain_resume_callback(void *data);
+extern void libxl__colo_save_domain_should_checkpoint_callback(void *data);
+extern void libxl__colo_save_setup(libxl__egc *egc,
+                                   libxl__colo_save_state *css);
+extern void libxl__colo_save_teardown(libxl__egc *egc,
+                                      libxl__colo_save_state *css,
+                                      int rc);
 
 #endif

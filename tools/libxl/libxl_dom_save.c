@@ -16,6 +16,7 @@
 #include "libxl_osdeps.h" /* must come before any other headers */
 
 #include "libxl_internal.h"
+#include "libxl_colo.h"
 
 struct libxl__physmap_info {
     uint64_t phys_offset;
@@ -437,6 +438,11 @@ void libxl__domain_save(libxl__egc *egc, libxl__domain_save_state *dss)
         callbacks->suspend = libxl__remus_domain_suspend_callback;
         callbacks->postcopy = libxl__remus_domain_resume_callback;
         callbacks->checkpoint = libxl__remus_domain_save_checkpoint_callback;
+    } else if (dss->checkpointed_stream == LIBXL_CHECKPOINTED_STREAM_COLO) {
+        callbacks->suspend = libxl__colo_save_domain_suspend_callback;
+        callbacks->postcopy = libxl__colo_save_domain_resume_callback;
+        callbacks->checkpoint = libxl__colo_save_domain_checkpoint_callback;
+        callbacks->should_checkpoint = libxl__colo_save_domain_should_checkpoint_callback;
     } else
         callbacks->suspend = libxl__domain_suspend_callback;
 
@@ -575,12 +581,15 @@ static void domain_save_done(libxl__egc *egc,
     }
 
     /*
-     * With Remus, if we reach this point, it means either
+     * With Remus/COLO, if we reach this point, it means either
      * backup died or some network error occurred preventing us
      * from sending checkpoints. Teardown the network buffers and
      * release netlink resources.  This is an async op.
      */
-    libxl__remus_teardown(egc, &dss->rs, rc);
+    if (libxl_defbool_val(dss->remus->colo))
+        libxl__colo_save_teardown(egc, &dss->css, rc);
+    else
+        libxl__remus_teardown(egc, &dss->rs, rc);
 }
 
 /*========================= Domain restore ============================*/
