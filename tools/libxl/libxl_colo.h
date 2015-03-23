@@ -24,4 +24,14 @@ extern void libxl__colo_restore_teardown(libxl__egc *egc,
                                          libxl__colo_restore_state *crs,
                                          int rc);
 
+extern void libxl__colo_save_domain_suspend_callback(void *data);
+extern void libxl__colo_save_domain_checkpoint_callback(void *data);
+extern void libxl__colo_save_domain_resume_callback(void *data);
+extern void libxl__colo_save_domain_should_checkpoint_callback(void *data);
+extern void libxl__colo_save_setup(libxl__egc *egc,
+                                   libxl__colo_save_state *css);
+extern void libxl__colo_save_teardown(libxl__egc *egc,
+                                      libxl__colo_save_state *css,
+                                      int rc);
+
 #endif
