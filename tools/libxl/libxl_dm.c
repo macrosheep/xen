@@ -416,6 +416,211 @@ static char *dm_spice_options(libxl__gc *gc,
     return opt;
 }
 
+/* colo mode */
+enum {
+    LIBXL__COLO_NONE = 0,
+    LIBXL__COLO_PRIMARY,
+    LIBXL__COLO_SECONDARY,
+};
+
+/* The format of colo-params: host:port:exportname=xx */
+static int parse_colo_params(libxl__gc *gc, const char *colo_params,
+                             const char **host, const char **port,
+                             const char **exportname)
+{
+    const char *delim;
+
+    delim = strstr(colo_params, ":");
+    if (!delim)
+        return 1;
+    if (delim == colo_params)
+        return 1;
+    *host = libxl__strndup(gc, colo_params, delim - colo_params);
+    colo_params = delim + 1;
+
+    delim = strstr(colo_params, ":");
+    if (!delim)
+        return 1;
+    if (delim == colo_params)
+        return 1;
+    *port = libxl__strndup(gc, colo_params, delim - colo_params);
+    colo_params = delim + 1;
+
+    if (strncmp(colo_params, "exportname=", strlen("exportname=")))
+        return 1;
+    *exportname = colo_params + strlen("exportname=");
+    if ((*exportname)[0] == 0)
+        return 1;
+
+    return 0;
+}
+
+static char *qemu_disk_scsi_drive_string(libxl__gc *gc, const char *pdev_path,
+                                         int unit, const char *format,
+                                         const libxl_device_disk *disk,
+                                         const char *nbd_target,
+                                         int colo_mode)
+{
+    char *drive = NULL;
+    const char *host = NULL, *port = NULL, *exportname = NULL;
+    libxl_ctx *ctx = libxl__gc_owner(gc);
+    const char *colo_params = disk->colo_params;
+    const char *active_disk = disk->active_disk;
+    const char *hidden_disk = disk->hidden_disk;
+
+    switch (colo_mode) {
+    case LIBXL__COLO_NONE:
+        drive = libxl__sprintf
+            (gc, "file=%s,if=scsi,bus=0,unit=%d,format=%s,cache=writeback",
+             pdev_path, unit, format);
+        break;
+    case LIBXL__COLO_PRIMARY:
+        /*
+         * primary:
+         *  -dirve if=scsi,bus=0,unit=x,cache=writeback,driver=quorum,\
+         *  children.0.file.filename=pdev_path,\
+         *  children.0.driver=format,\
+         *  children.1.file.host=host,\
+         *  children.1.file.port=port,\
+         *  children.1.file.export=exportname,\
+         *  children.1.file.driver=nbd+colo,\
+         *  children.1.driver=raw,\
+         *  children.1.ignore-errors=on,\
+         *  read-pattern=fifo
+         */
+
+        if (parse_colo_params(gc, colo_params, &host, &port, &exportname))
+            break;
+
+        drive = libxl__sprintf
+            (gc, "if=scsi,bus=0,unit=%d,cache=writeback,driver=quorum,"
+                 "children.0.file.filename=%s,"
+                 "children.0.driver=%s,"
+                 "children.1.file.host=%s,"
+                 "children.1.file.port=%s,"
+                 "children.1.file.export=%s,"
+                 "children.1.file.driver=nbd+colo,"
+                 "children.1.driver=raw,"
+                 "children.1.ignore-errors=on,"
+                 "read-pattern=fifo",
+             unit, pdev_path, format, host, port, exportname);
+        break;
+    case LIBXL__COLO_SECONDARY:
+        /*
+         * secondary:
+         *  -drive if=scsi,bus=0,unit=x,cache=writeback,driver=qcow2+colo,\
+         *  file=active_disk,\
+         *  backing_reference.drive_id=nbd_target,\
+         *  backing_reference.hidden-disk.file.filename=hidden_disk,\
+         *  backing_reference.hidden-disk.allow-write-backing-file=on,\
+         *  export=exportname,
+         */
+
+        if (parse_colo_params(gc, colo_params, &host, &port, &exportname))
+            break;
+
+        drive = libxl__sprintf
+            (gc, "if=scsi,bus=0,unit=%d,cache=writeback,driver=qcow2+colo,"
+                 "file=%s,"
+                 "backing_reference.drive_id=%s,"
+                 "backing_reference.hidden-disk.file.filename=%s,"
+                 "backing_reference.hidden-disk.allow-write-backing-file=on,"
+                 "export=%s",
+             unit, active_disk, nbd_target, hidden_disk, exportname);
+        break;
+    default:
+        abort();
+    }
+
+    if (!drive)
+        LIBXL__LOG(ctx, LIBXL__LOG_WARNING,
+                   "colo-params is invalid for %s", pdev_path);
+    return drive;
+}
+
+static char *qemu_disk_ide_drive_string(libxl__gc *gc, const char *pdev_path,
+                                        int unit, const char *format,
+                                        const libxl_device_disk *disk,
+                                        const char *nbd_target,
+                                        int colo_mode)
+{
+    char *drive = NULL;
+    const char *host = NULL, *port = NULL, *exportname = NULL;
+    libxl_ctx *ctx = libxl__gc_owner(gc);
+    const char *colo_params = disk->colo_params;
+    const char *active_disk = disk->active_disk;
+    const char *hidden_disk = disk->hidden_disk;
+
+    switch (colo_mode) {
+    case LIBXL__COLO_NONE:
+        drive = libxl__sprintf
+            (gc, "file=%s,if=ide,index=%d,media=disk,format=%s,cache=writeback",
+             pdev_path, unit, format);
+        break;
+    case LIBXL__COLO_PRIMARY:
+        /*
+         * primary:
+         *  -dirve if=ide,index=x,media=disk,cache=writeback,driver=quorum,\
+         *  children.0.file.filename=pdev_path,\
+         *  children.0.driver=format,\
+         *  children.1.file.host=host,\
+         *  children.1.file.port=port,\
+         *  children.1.file.export=exportname,\
+         *  children.1.file.driver=nbd+colo,\
+         *  children.1.driver=raw,\
+         *  children.1.ignored-errors=on,\
+         *  read-pattern=fifo
+         */
+
+        if (parse_colo_params(gc, colo_params, &host, &port, &exportname))
+            break;
+
+        drive = libxl__sprintf
+            (gc, "if=ide,index=%d,media=disk,cache=writeback,driver=quorum,"
+                 "children.0.file.filename=%s,"
+                 "children.0.driver=%s,"
+                 "children.1.file.host=%s,"
+                 "children.1.file.port=%s,"
+                 "children.1.file.export=%s,"
+                 "children.1.file.driver=nbd+colo,"
+                 "children.1.driver=raw,"
+                 "children.1.ignore-errors=on,"
+                 "read-pattern=fifo",
+             unit, pdev_path, format, host, port, exportname);
+        break;
+    case LIBXL__COLO_SECONDARY:
+        /*
+         * secondary:
+         *  -drive if=ide,index=x,media=disk,cache=writeback,driver=qcow2+colo,\
+         *  file=active_disk,\
+         *  backing_reference.drive_id=nbd_target,\
+         *  backing_reference.hidden-disk.file.filename=hidden_disk,\
+         *  backing_reference.hidden-disk.allow-write-backing-file=on,\
+         *  export=exportname,
+         */
+
+        if (parse_colo_params(gc, colo_params, &host, &port, &exportname))
+            break;
+
+        drive = libxl__sprintf
+            (gc, "if=ide,index=%d,media=disk,cache=writeback,driver=qcow2+colo,"
+                 "file=%s,"
+                 "backing_reference.drive_id=%s,"
+                 "backing_reference.hidden-disk.file.filename=%s,"
+                 "backing_reference.hidden-disk.allow-write-backing-file=on,"
+                 "export=%s",
+             unit, active_disk, nbd_target, hidden_disk, exportname);
+        break;
+    default:
+        abort();
+    }
+
+    if (!drive)
+        LIBXL__LOG(ctx, LIBXL__LOG_WARNING,
+                   "colo-params is invalid for %s", pdev_path);
+    return drive;
+}
+
 static char ** libxl__build_device_model_args_new(libxl__gc *gc,
                                         const char *dm, int guest_domid,
                                         const libxl_domain_config *guest_config,
@@ -794,6 +999,8 @@ static char ** libxl__build_device_model_args_new(libxl__gc *gc,
             const char *format = qemu_disk_format_string(disks[i].format);
             char *drive;
             const char *pdev_path;
+            int colo_mode;
+            char *drive_id;
 
             if (dev_number == -1) {
                 LIBXL__LOG(ctx, LIBXL__LOG_WARNING, "unable to determine"
@@ -837,16 +1044,55 @@ static char ** libxl__build_device_model_args_new(libxl__gc *gc,
                  * For other disks we translate devices 0..3 into
                  * hd[a-d] and ignore the rest.
                  */
-                if (strncmp(disks[i].vdev, "sd", 2) == 0)
+                if (libxl_defbool_val(disks[i].colo_enable)) {
+                    if (libxl_defbool_val(disks[i].colo_restore_enable))
+                        colo_mode = LIBXL__COLO_SECONDARY;
+                    else
+                        colo_mode = LIBXL__COLO_PRIMARY;
+                } else {
+                    colo_mode = LIBXL__COLO_NONE;
+                }
+
+                if (colo_mode == LIBXL__COLO_SECONDARY) {
+                    /*
+                     * -drive if=none,driver=format,file=pdev_path,\
+                     * id=nbd_targetx
+                     */
+                    if (strncmp(disks[i].vdev, "sd", 2) == 0) {
+                        drive_id = libxl__sprintf(gc, "nbd_target%d", disk + 4);
+                    } else if (disk < 4) {
+                        drive_id = libxl__sprintf(gc, "nbd_target%d", disk);
+                    } else {
+                        continue; /* Do not emulate this disk */
+                    }
                     drive = libxl__sprintf
-                        (gc, "file=%s,if=scsi,bus=0,unit=%d,format=%s,cache=writeback",
-                         pdev_path, disk, format);
-                else if (disk < 4)
-                    drive = libxl__sprintf
-                        (gc, "file=%s,if=ide,index=%d,media=disk,format=%s,cache=writeback",
-                         pdev_path, disk, format);
-                else
+                        (gc, "if=none,driver=%s,file=%s,id=%s",
+                         format, pdev_path, drive_id);
+
+                    flexarray_append(dm_args, "-drive");
+                    flexarray_append(dm_args, drive);
+                } else {
+                    drive_id = NULL;
+                }
+
+                if (strncmp(disks[i].vdev, "sd", 2) == 0) {
+                    drive = qemu_disk_scsi_drive_string(gc, pdev_path, disk,
+                                                        format,
+                                                        &disks[i],
+                                                        drive_id,
+                                                        colo_mode);
+                } else if (disk < 4) {
+                    drive = qemu_disk_ide_drive_string(gc, pdev_path, disk,
+                                                       format,
+                                                       &disks[i],
+                                                       drive_id,
+                                                       colo_mode);
+                } else {
                     continue; /* Do not emulate this disk */
+                }
+
+                if (!drive)
+                    continue;
             }
 
             flexarray_append(dm_args, "-drive");

@@ -2296,6 +2296,8 @@ int libxl__device_disk_setdefault(libxl__gc *gc, libxl_device_disk *disk)
     int rc;
 
     libxl_defbool_setdefault(&disk->discard_enable, !!disk->readwrite);
+    libxl_defbool_setdefault(&disk->colo_enable, false);
+    libxl_defbool_setdefault(&disk->colo_restore_enable, false);
 
     rc = libxl__resolve_domid(gc, disk->backend_domname, &disk->backend_domid);
     if (rc < 0) return rc;
@@ -2496,6 +2498,14 @@ static void device_disk_add(libxl__egc *egc, uint32_t domid,
                 flexarray_append(back, "params");
                 flexarray_append(back, libxl__sprintf(gc, "%s:%s",
                               libxl__device_disk_string_of_format(disk->format), disk->pdev_path));
+                if (libxl_defbool_val(disk->colo_enable)) {
+                    flexarray_append(back, "colo-params");
+                    flexarray_append(back, libxl__sprintf(gc, "%s", disk->colo_params));
+                    flexarray_append(back, "active-disk");
+                    flexarray_append(back, libxl__sprintf(gc, "%s", disk->active_disk));
+                    flexarray_append(back, "hidden-disk");
+                    flexarray_append(back, libxl__sprintf(gc, "%s", disk->hidden_disk));
+                }
                 assert(device->backend_kind == LIBXL__DEVICE_KIND_QDISK);
                 break;
             default:
@@ -2610,7 +2620,10 @@ static int libxl__device_disk_from_xs_be(libxl__gc *gc,
         goto cleanup;
     }
 
-    /* "params" may not be present; but everything else must be. */
+    /*
+     * "params" and "colo-params" may not be present; but everything
+     * else must be.
+     */
     tmp = xs_read(ctx->xsh, XBT_NULL,
                   libxl__sprintf(gc, "%s/params", be_path), &len);
     if (tmp && strchr(tmp, ':')) {
@@ -2618,6 +2631,33 @@ static int libxl__device_disk_from_xs_be(libxl__gc *gc,
         free(tmp);
     } else {
         disk->pdev_path = tmp;
+    }
+
+    tmp = xs_read(ctx->xsh, XBT_NULL,
+                  libxl__sprintf(gc, "%s/colo-params", be_path), &len);
+    if (tmp) {
+        libxl_defbool_set(&disk->colo_enable, true);
+        disk->colo_params = tmp;
+    } else {
+        libxl_defbool_set(&disk->colo_enable, false);
+    }
+
+    if (libxl_defbool_val(disk->colo_enable)) {
+        tmp = xs_read(ctx->xsh, XBT_NULL,
+                      libxl__sprintf(gc, "%s/active-disk", be_path), &len);
+        if (!tmp) {
+            LOG(ERROR, "Missing xenstore node %s/active-disk", be_path);
+            goto cleanup;
+        }
+        disk->active_disk = tmp;
+
+        tmp = xs_read(ctx->xsh, XBT_NULL,
+                      libxl__sprintf(gc, "%s/hidden-disk", be_path), &len);
+        if (!tmp) {
+            LOG(ERROR, "Missing xenstore node %s/hidden-disk", be_path);
+            goto cleanup;
+        }
+        disk->hidden_disk = tmp;
     }
 
 
