@@ -542,6 +542,11 @@ libxl_device_disk = Struct("device_disk", [
     ("is_cdrom", integer),
     ("direct_io_safe", bool),
     ("discard_enable", libxl_defbool),
+    ("colo_enable", libxl_defbool),
+    ("colo_restore_enable", libxl_defbool),
+    ("colo_params", string),
+    ("active_disk", string),
+    ("hidden_disk", string)
     ])
 
 libxl_device_nic = Struct("device_nic", [

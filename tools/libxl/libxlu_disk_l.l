@@ -176,6 +176,11 @@ script=[^,]*,?	{ STRIP(','); SAVESTRING("script", script, FROMEQUALS); }
 direct-io-safe,? { DPC->disk->direct_io_safe = 1; }
 discard,?	{ libxl_defbool_set(&DPC->disk->discard_enable, true); }
 no-discard,?	{ libxl_defbool_set(&DPC->disk->discard_enable, false); }
+colo,?		{ libxl_defbool_set(&DPC->disk->colo_enable, true); }
+no-colo,?	{ libxl_defbool_set(&DPC->disk->colo_enable, false); }
+colo-params=[^,]*,?	{ STRIP(','); SAVESTRING("colo-params", colo_params, FROMEQUALS); }
+active-disk=[^,]*,?	{ STRIP(','); SAVESTRING("active-disk", active_disk, FROMEQUALS); }
+hidden-disk=[^,]*,?	{ STRIP(','); SAVESTRING("hidden-disk", hidden_disk, FROMEQUALS); }
 
  /* the target magic parameter, eats the rest of the string */
 
