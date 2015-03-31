@@ -25,6 +25,7 @@ XEN_SCRIPTS += vscsi
 XEN_SCRIPTS += block-iscsi
 XEN_SCRIPTS += block-drbd-probe
 XEN_SCRIPTS += $(XEN_SCRIPTS-y)
+XEN_SCRIPTS += colo-proxy-setup
 
 SUBDIRS-$(CONFIG_SYSTEMD) += systemd
 

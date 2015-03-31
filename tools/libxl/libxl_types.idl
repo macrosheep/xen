@@ -539,6 +539,7 @@ libxl_device_nic = Struct("device_nic", [
     ("rate_bytes_per_interval", uint64),
     ("rate_interval_usecs", uint32),
     ("gatewaydev", string),
+    ("forwarddev", string)
     ])
 
 libxl_device_pci = Struct("device_pci", [

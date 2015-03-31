@@ -2746,6 +2746,8 @@ void cleanup_subkind_drbd_disk(libxl__checkpoint_devices_state *cds);
 int init_subkind_qdisk(libxl__checkpoint_devices_state *cds);
 void cleanup_subkind_qdisk(libxl__checkpoint_devices_state *cds);
 int colo_qdisk_preresume(libxl_ctx *ctx, domid_t domid);
+int init_subkind_colo_nic(libxl__checkpoint_devices_state *cds);
+void cleanup_subkind_colo_nic(libxl__checkpoint_devices_state *cds);
 
 typedef void libxl__checkpoint_callback(libxl__egc *,
                                         libxl__checkpoint_devices_state *,
@@ -2947,6 +2949,7 @@ struct libxl__colo_save_state {
     libxl__checkpoint_devices_state cds;
     int send_fd;
     int recv_fd;
+    char *colo_proxy_script;
 
     /* private */
     libxl__stream_read_state srs;
@@ -3336,6 +3339,7 @@ struct libxl__colo_restore_state {
     int recv_fd;
     int hvm;
     libxl__colo_callback *callback;
+    char *colo_proxy_script;
 
     /* private, colo restore checkpoint state */
     libxl__domain_create_cb *saved_cb;
@@ -3358,6 +3362,7 @@ struct libxl__domain_create_state {
     libxl_asyncprogress_how aop_console_how;
     /* private to domain_create */
     int guest_domid;
+    const char *colo_proxy_script;
     libxl__domain_build_state build_state;
     libxl__colo_restore_state crs;
     libxl__bootloader_state bl;
