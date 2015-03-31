@@ -3213,6 +3213,9 @@ struct libxl__colo_restore_state {
 
     /* private, used by qdisk block replication */
     bool qdisk_setuped;
+
+    /* private, used by colo proxy */
+    libxl__colo_proxy_state cps;
 };
 
 struct libxl__domain_create_state {
