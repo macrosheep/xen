@@ -65,9 +65,11 @@ static void libxl__colo_restore_domain_resume_callback(void *data);
 static void libxl__colo_restore_domain_checkpoint_callback(void *data);
 static void libxl__colo_restore_domain_suspend_callback(void *data);
 
+extern const libxl__checkpoint_device_instance_ops colo_restore_device_nic;
 extern const libxl__checkpoint_device_instance_ops colo_restore_device_qdisk;
 
 static const libxl__checkpoint_device_instance_ops *colo_restore_ops[] = {
+    &colo_restore_device_nic,
     &colo_restore_device_qdisk,
     NULL,
 };
@@ -167,8 +169,14 @@ static int init_device_subkind(libxl__checkpoint_devices_state *cds)
     int rc;
     STATE_AO_GC(cds->ao);
 
+    rc = init_subkind_colo_nic(cds);
+    if (rc) goto out;
+
     rc = init_subkind_qdisk(cds);
-    if (rc)  goto out;
+    if (rc) {
+        cleanup_subkind_colo_nic(cds);
+        goto out;
+    }
 
     rc = 0;
 out:
@@ -180,6 +188,7 @@ static void cleanup_device_subkind(libxl__checkpoint_devices_state *cds)
     /* cleanup device subkind-specific state in the libxl ctx */
     STATE_AO_GC(cds->ao);
 
+    cleanup_subkind_colo_nic(cds);
     cleanup_subkind_qdisk(cds);
 }
 
@@ -398,6 +407,8 @@ static void colo_restore_teardown_done(libxl__egc *egc,
     if (crcs->teardown_devices)
         cleanup_device_subkind(cds);
 
+    colo_proxy_teardown(&crs->cps);
+
     rc = crcs->saved_rc;
     if (!rc) {
         crcs->callback = do_failover_done;
@@ -607,6 +618,8 @@ static void colo_restore_preresume_cb(libxl__egc *egc,
         goto out;
     }
 
+    colo_proxy_preresume(&crs->cps);
+
     colo_restore_resume_vm(egc, crcs);
 
     return;
@@ -642,6 +655,8 @@ static void colo_resume_vm_done(libxl__egc *egc,
     }
 
     crcs->status = LIBXL_COLO_RESUMED;
+
+    colo_proxy_postresume(&crs->cps);
 
     /* avoid calling libxl__xc_domain_restore_done() more than once */
     if (crs->saved_cb) {
@@ -792,12 +807,19 @@ static void colo_setup_checkpoint_devices(libxl__egc *egc,
 
     STATE_AO_GC(crs->ao);
 
-    /* TODO: nic support */
-    cds->device_kind_flags = (1 << LIBXL__DEVICE_KIND_VBD);
+    cds->device_kind_flags = (1 << LIBXL__DEVICE_KIND_VIF) |
+                             (1 << LIBXL__DEVICE_KIND_VBD);
     cds->callback = colo_restore_setup_cds_done;
     cds->ao = ao;
     cds->domid = crs->domid;
     cds->ops = colo_restore_ops;
+
+    crs->cps.ao = ao;
+    if (colo_proxy_setup(&crs->cps)) {
+        LOG(ERROR, "COLO: failed to setup colo proxy for guest with domid %u",
+            cds->domid);
+        goto out;
+    }
 
     if (init_device_subkind(cds))
         goto out;
