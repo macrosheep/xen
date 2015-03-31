@@ -3045,6 +3045,15 @@ libxl__stream_read_inuse(const libxl__stream_read_state *stream)
 }
 
 /*----- colo related state structure -----*/
+typedef struct libxl__colo_proxy_state libxl__colo_proxy_state;
+struct libxl__colo_proxy_state {
+    /* set by caller of colo_proxy_setup */
+    libxl__ao *ao;
+
+    int sock_fd;
+    int index;
+};
+
 typedef struct libxl__colo_save_state libxl__colo_save_state;
 struct libxl__colo_save_state {
     libxl__checkpoint_devices_state cds;
@@ -3059,6 +3068,9 @@ struct libxl__colo_save_state {
 
     /* private, used by qdisk block replication */
     bool qdisk_setuped;
+
+    /* private, used by colo-proxy */
+    libxl__colo_proxy_state cps;
 };
 
 /*----- Domain suspend (save) state structure -----*/
