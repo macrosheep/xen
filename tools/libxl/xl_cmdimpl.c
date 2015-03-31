@@ -156,6 +156,7 @@ struct domain_create {
     const char *config_file;
     char *extra_config; /* extra config string */
     const char *restore_file;
+    char *colo_proxy_script;
     int migrate_fd; /* -1 means none */
     int send_fd; /* -1 means none */
     char **migration_domname_r; /* from malloc */
@@ -993,6 +994,8 @@ static int parse_nic_config(libxl_device_nic *nic, XLU_Config **config, char *to
         replace_string(&nic->model, oparg);
     } else if (MATCH_OPTION("rate", token, oparg)) {
         parse_vif_rate(config, oparg, nic);
+    } else if (MATCH_OPTION("forwarddev", token, oparg)) {
+        replace_string(&nic->forwarddev, oparg);
     } else if (MATCH_OPTION("accel", token, oparg)) {
         fprintf(stderr, "the accel parameter for vifs is currently not supported\n");
     } else {
@@ -2764,6 +2767,7 @@ start:
         params.checkpointed_stream = dom_info->checkpointed_stream;
         params.stream_version =
             (hdr.mandatory_flags & XL_MANDATORY_FLAG_STREAMv2) ? 2 : 1;
+        params.colo_proxy_script = dom_info->colo_proxy_script;
 
         ret = libxl_domain_create_restore(ctx, &d_config,
                                           &domid, restore_fd,
@@ -4285,7 +4289,8 @@ static void migrate_domain(uint32_t domid, const char *rune, int debug,
 }
 
 static void migrate_receive(int debug, int daemonize, int monitor,
-                            int send_fd, int recv_fd, int checkpointed)
+                            int send_fd, int recv_fd, int checkpointed,
+                            char *colo_proxy_script)
 {
     uint32_t domid;
     int rc, rc2;
@@ -4314,6 +4319,7 @@ static void migrate_receive(int debug, int daemonize, int monitor,
     dom_info.send_fd = send_fd;
     dom_info.migration_domname_r = &migration_domname;
     dom_info.checkpointed_stream = checkpointed;
+    dom_info.colo_proxy_script = colo_proxy_script;
     if (checkpointed == LIBXL_CHECKPOINTED_STREAM_COLO)
         /* COLO uses stdout to send control message to master */
         dom_info.quiet = 1;
@@ -4506,8 +4512,9 @@ int main_migrate_receive(int argc, char **argv)
     int debug = 0, daemonize = 1, monitor = 1;
     int checkpointed = LIBXL_CHECKPOINTED_STREAM_NONE;
     int opt;
+    char *script = NULL;
 
-    SWITCH_FOREACH_OPT(opt, "Fedrc", NULL, "migrate-receive", 0) {
+    SWITCH_FOREACH_OPT(opt, "Fedrcn:", NULL, "migrate-receive", 0) {
     case 'F':
         daemonize = 0;
         break;
@@ -4524,6 +4531,9 @@ int main_migrate_receive(int argc, char **argv)
     case 'c':
         checkpointed = LIBXL_CHECKPOINTED_STREAM_COLO;
         break;
+    case 'n':
+        script = optarg;
+        break;
     }
 
     if (argc-optind != 0) {
@@ -4532,7 +4542,7 @@ int main_migrate_receive(int argc, char **argv)
     }
     migrate_receive(debug, daemonize, monitor,
                     STDOUT_FILENO, STDIN_FILENO,
-                    checkpointed);
+                    checkpointed, script);
 
     return 0;
 }
@@ -7932,8 +7942,10 @@ int main_remus(int argc, char **argv)
         r_info.interval = 200;
 
     if (libxl_defbool_val(r_info.colo)) {
-        if (r_info.interval || libxl_defbool_val(r_info.blackhole)) {
-            perror("Option -c conflicts with -i or -b");
+        if (r_info.interval || libxl_defbool_val(r_info.blackhole) ||
+            !libxl_defbool_is_default(r_info.netbuf) ||
+            !libxl_defbool_is_default(r_info.diskbuf)) {
+            perror("option -c is conflict with -i, -d, -n or -b");
             exit(-1);
         }
 
@@ -7944,8 +7956,12 @@ int main_remus(int argc, char **argv)
         }
     }
 
-    if (!r_info.netbufscript)
-        r_info.netbufscript = default_remus_netbufscript;
+    if (!r_info.netbufscript) {
+        if (libxl_defbool_val(r_info.colo))
+            r_info.netbufscript = default_colo_proxy_script;
+        else
+            r_info.netbufscript = default_remus_netbufscript;
+    }
 
     if (libxl_defbool_val(r_info.blackhole)) {
         send_fd = open("/dev/null", O_RDWR, 0644);
@@ -7958,11 +7974,21 @@ int main_remus(int argc, char **argv)
         if (!ssh_command[0]) {
             rune = host;
         } else {
-            if (asprintf(&rune, "exec %s %s xl migrate-receive %s %s",
-                         ssh_command, host,
-                         libxl_defbool_val(r_info.colo) ? "-c" : "-r",
-                         daemonize ? "" : " -e") < 0)
-                return 1;
+            if (!libxl_defbool_val(r_info.colo)) {
+                if (asprintf(&rune, "exec %s %s xl migrate-receive %s %s",
+                             ssh_command, host,
+                             "-r",
+                             daemonize ? "" : " -e") < 0)
+                    return 1;
+            } else {
+                if (asprintf(&rune, "exec %s %s xl migrate-receive %s %s %s %s",
+                             ssh_command, host,
+                             "-c",
+                             r_info.netbufscript ? "-n" : "",
+                             r_info.netbufscript ? r_info.netbufscript : "",
+                             daemonize ? "" : " -e") < 0)
+                    return 1;
+            }
         }
 
         save_domain_core_begin(domid, NULL, &config_data, &config_len);
