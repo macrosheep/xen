@@ -18,9 +18,11 @@
 #include "libxl_internal.h"
 #include "libxl_colo.h"
 
+extern const libxl__checkpoint_device_instance_ops colo_save_device_nic;
 extern const libxl__checkpoint_device_instance_ops colo_save_device_qdisk;
 
 static const libxl__checkpoint_device_instance_ops *colo_ops[] = {
+    &colo_save_device_nic,
     &colo_save_device_qdisk,
     NULL,
 };
@@ -32,8 +34,14 @@ static int init_device_subkind(libxl__checkpoint_devices_state *cds)
     int rc;
     STATE_AO_GC(cds->ao);
 
-    rc = init_subkind_qdisk(cds);
+    rc = init_subkind_colo_nic(cds);
     if (rc) goto out;
+
+    rc = init_subkind_qdisk(cds);
+    if (rc) {
+        cleanup_subkind_colo_nic(cds);
+        goto out;
+    }
 
     rc = 0;
 out:
@@ -45,6 +53,7 @@ static void cleanup_device_subkind(libxl__checkpoint_devices_state *cds)
     /* cleanup device subkind-specific state in the libxl ctx */
     STATE_AO_GC(cds->ao);
 
+    cleanup_subkind_colo_nic(cds);
     cleanup_subkind_qdisk(cds);
 }
 
@@ -75,9 +84,16 @@ void libxl__colo_save_setup(libxl__egc *egc, libxl__colo_save_state *css)
     css->svm_running = false;
     css->paused = true;
     css->qdisk_setuped = false;
+    libxl__ev_child_init(&css->child);
 
-    /* TODO: nic support */
-    cds->device_kind_flags = (1 << LIBXL__DEVICE_KIND_VBD);
+    if (dss->remus->netbufscript)
+        css->colo_proxy_script = libxl__strdup(gc, dss->remus->netbufscript);
+    else
+        css->colo_proxy_script = GCSPRINTF("%s/colo-proxy-setup",
+                                           libxl__xen_script_dir_path());
+
+    cds->device_kind_flags = (1 << LIBXL__DEVICE_KIND_VIF) |
+                             (1 << LIBXL__DEVICE_KIND_VBD);
     cds->ops = colo_ops;
     cds->callback = colo_save_setup_done;
     cds->ao = ao;
@@ -103,12 +119,18 @@ static void colo_save_setup_done(libxl__egc *egc,
     STATE_AO_GC(cds->ao);
 
     if (!rc) {
+        css->cps.ao = ao;
+        rc = colo_proxy_setup(&css->cps);
+        if (rc)
+            goto failed;
         libxl__domain_suspend(egc, dss);
         return;
     }
 
     LOG(ERROR, "COLO: failed to setup device for guest with domid %u",
         dss->domid);
+
+failed:
     css->cds.callback = colo_save_setup_failed;
     libxl__checkpoint_devices_teardown(egc, &css->cds);
 }
@@ -156,6 +178,7 @@ static void colo_teardown_done(libxl__egc *egc,
     libxl__domain_suspend_state *dss = CONTAINER_OF(css, *dss, css);
 
     cleanup_device_subkind(cds);
+    colo_proxy_teardown(&css->cps);
     dss->callback(egc, dss, rc);
 }
 
@@ -436,6 +459,8 @@ static void colo_read_svm_ready_done(libxl__egc *egc,
         goto out;
     }
 
+    colo_proxy_preresume(&css->cps);
+
     css->svm_running = true;
     css->cds.callback = colo_preresume_cb;
     libxl__checkpoint_devices_preresume(egc, &css->cds);
@@ -529,6 +554,8 @@ static void colo_read_svm_resumed_done(libxl__egc *egc,
         goto out;
     }
 
+    colo_proxy_postresume(&css->cps);
+
     ok = 1;
 
 out:
@@ -537,6 +564,91 @@ out:
 
 
 /* ===================== colo: wait new checkpoint ===================== */
+
+static void colo_start_new_checkpoint(libxl__egc *egc,
+                                      libxl__checkpoint_devices_state *cds,
+                                      int rc);
+static void colo_proxy_async_wait_for_checkpoint(libxl__colo_save_state *css);
+static void colo_proxy_async_call_done(libxl__egc *egc,
+                                       libxl__ev_child *child,
+                                       int pid,
+                                       int status);
+
+static void colo_proxy_async_call(libxl__egc *egc,
+                                  libxl__colo_save_state *css,
+                                  void func(libxl__colo_save_state *),
+                                  libxl__ev_child_callback callback)
+{
+    int pid = -1, rc;
+
+    STATE_AO_GC(css->cds.ao);
+
+    /* Fork and call */
+    pid = libxl__ev_child_fork(gc, &css->child, callback);
+    if (pid == -1) {
+        LOG(ERROR, "unable to fork");
+        rc = ERROR_FAIL;
+        goto out;
+    }
+
+    if (!pid) {
+        /* child */
+        func(css);
+        /* notreached */
+        abort();
+    }
+
+    return;
+
+out:
+    callback(egc, &css->child, -1, 1);
+}
+
+static void colo_proxy_wait_for_checkpoint(libxl__egc *egc,
+                                           libxl__colo_save_state *css)
+{
+    colo_proxy_async_call(egc, css,
+                          colo_proxy_async_wait_for_checkpoint,
+                          colo_proxy_async_call_done);
+}
+
+static void colo_proxy_async_wait_for_checkpoint(libxl__colo_save_state *css)
+{
+    int req;
+
+again:
+    req = colo_proxy_checkpoint(&css->cps);
+    if (req < 0) {
+        /* some error happens */
+        _exit(1);
+    } else if (!req) {
+        /* no checkpoint is needed, wait for 1ms and the check again */
+        usleep(1000);
+        goto again;
+    } else {
+        /* net packets is not consistent, we need to start a checkpoint */
+        _exit(0);
+    }
+}
+
+static void colo_proxy_async_call_done(libxl__egc *egc,
+                                       libxl__ev_child *child,
+                                       int pid,
+                                       int status)
+{
+    libxl__colo_save_state *css = CONTAINER_OF(child, *css, child);
+
+    EGC_GC;
+
+    if (status) {
+        LOG(ERROR, "failed to wait for new checkpoint");
+        colo_start_new_checkpoint(egc, &css->cds, ERROR_FAIL);
+        return;
+    }
+
+    colo_start_new_checkpoint(egc, &css->cds, 0);
+}
+
 /*
  * Do the following things:
  * 1. do commit
@@ -546,9 +658,6 @@ out:
 static void colo_device_commit_cb(libxl__egc *egc,
                                   libxl__checkpoint_devices_state *cds,
                                   int rc);
-static void colo_start_new_checkpoint(libxl__egc *egc,
-                                      libxl__checkpoint_devices_state *cds,
-                                      int rc);
 
 void libxl__colo_save_domain_checkpoint_callback(void *data)
 {
@@ -577,8 +686,7 @@ static void colo_device_commit_cb(libxl__egc *egc,
         goto out;
     }
 
-    /* TODO: wait a new checkpoint */
-    colo_start_new_checkpoint(egc, cds, 0);
+    colo_proxy_wait_for_checkpoint(egc, css);
     return;
 
 out:
