@@ -178,6 +178,7 @@ extern char *default_bridge;
 extern char *default_gatewaydev;
 extern char *default_vifbackend;
 extern char *default_remus_netbufscript;
+extern char *default_colo_proxy_script;
 extern char *blkdev_start;
 
 enum output_format {

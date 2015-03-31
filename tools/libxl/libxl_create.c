@@ -1168,6 +1168,11 @@ static void domcreate_bootloader_done(libxl__egc *egc,
         crs->superpages = superpages;
         crs->pae = pae;
         crs->callback = libxl__colo_restore_setup_done;
+        if (dcs->colo_proxy_script)
+            crs->colo_proxy_script = libxl__strdup(gc, dcs->colo_proxy_script);
+        else
+            crs->colo_proxy_script = GCSPRINTF("%s/colo-proxy-setup",
+                                               libxl__xen_script_dir_path());
         libxl__colo_restore_setup(egc, crs);
     } else
         libxl__xc_domain_restore(egc, dcs,
@@ -1692,6 +1697,7 @@ static void domain_create_cb(libxl__egc *egc,
 static int do_domain_create(libxl_ctx *ctx, libxl_domain_config *d_config,
                             uint32_t *domid, int restore_fd,
                             int send_fd, int checkpointed_stream,
+                            const char *colo_proxy_script,
                             const libxl_asyncop_how *ao_how,
                             const libxl_asyncprogress_how *aop_console_how)
 {
@@ -1707,6 +1713,7 @@ static int do_domain_create(libxl_ctx *ctx, libxl_domain_config *d_config,
     cdcs->dcs.send_fd = send_fd;
     cdcs->dcs.callback = domain_create_cb;
     cdcs->dcs.checkpointed_stream = checkpointed_stream;
+    cdcs->dcs.colo_proxy_script = colo_proxy_script;
     libxl__ao_progress_gethow(&cdcs->dcs.aop_console_how, aop_console_how);
     cdcs->domid_out = domid;
 
@@ -1750,7 +1757,7 @@ int libxl_domain_create_new(libxl_ctx *ctx, libxl_domain_config *d_config,
                             const libxl_asyncprogress_how *aop_console_how)
 {
     unset_disk_colo_restore(d_config);
-    return do_domain_create(ctx, d_config, domid, -1, -1, 0,
+    return do_domain_create(ctx, d_config, domid, -1, -1, 0, NULL,
                             ao_how, aop_console_how);
 }
 
@@ -1761,16 +1768,19 @@ int libxl_domain_create_restore(libxl_ctx *ctx, libxl_domain_config *d_config,
                                 const libxl_asyncprogress_how *aop_console_how)
 {
     int send_fd = -1;
+    char *colo_proxy_script = NULL;
 
     if (params->checkpointed_stream == LIBXL_CHECKPOINTED_STREAM_COLO) {
         send_fd = params->send_fd;
+        colo_proxy_script = params->colo_proxy_script;
         set_disk_colo_restore(d_config);
     } else {
         unset_disk_colo_restore(d_config);
     }
 
     return do_domain_create(ctx, d_config, domid, restore_fd, send_fd,
-                            params->checkpointed_stream, ao_how, aop_console_how);
+                            params->checkpointed_stream, colo_proxy_script,
+                            ao_how, aop_console_how);
 }
 
 /*
