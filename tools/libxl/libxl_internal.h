@@ -2864,6 +2864,10 @@ struct libxl__colo_save_state {
 
     /* private, used by qdisk block replication */
     bool qdisk_setuped;
+
+    /* private, used by colo-proxy */
+    libxl__colo_proxy_state cps;
+    libxl__ev_child child;
 };
 
 /*----- Domain suspend (save) state structure -----*/
