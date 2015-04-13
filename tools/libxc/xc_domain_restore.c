@@ -47,6 +47,13 @@
 #include <xen/hvm/ioreq.h>
 #include <xen/hvm/params.h>
 
+/* Leave some slack so that hvmloader does not complain about lack of
+ * memory at boot time ("Could not allocate order=0 extent").
+ * Once hvmloader is modified to cope with that situation without
+ * printing warning messages, QEMU_SPARE_PAGES can be removed.
+ */
+#define QEMU_SPARE_PAGES 16
+
 struct restore_ctx {
     unsigned long max_mfn; /* max mfn of the current host machine */
     unsigned long hvirt_start; /* virtual starting address of the hypervisor */
@@ -209,12 +216,44 @@ static int uncanonicalize_pagetable(
         if (!ctx->hvm && ctx->superpages)
             rc = alloc_superpage_mfns(xch, dom, ctx, nr_mfns);
         else
+        {
+            xc_domaininfo_t info;
+            unsigned long free_pages;
+
+            if ((xc_domain_getinfolist(xch, dom, 1, &info) != 1) ||
+                (info.domain != dom)) {
+                ERROR("Failed xc_domain_getinfolist for batch (uncanonicalize_pagetable)\n");
+                errno = ENOMEM;
+                return 0;
+            }
+            free_pages = info.max_pages - info.tot_pages;
+            if (free_pages > QEMU_SPARE_PAGES) {
+                free_pages -= QEMU_SPARE_PAGES;
+            } else {
+                free_pages = 0;
+            }
+            if (free_pages < nr_mfns)
+            {
+                DPRINTF("Adjust memory for batch (uncanonicalize_pagetable): free_pages=%lu nr_mfns=%d max_pages=%lu tot_pages=%lu max_mfn=%lu\n",
+                        free_pages, nr_mfns, (unsigned long)info.max_pages,
+                        (unsigned long)info.tot_pages, ctx->max_mfn);
+                if (xc_domain_setmaxmem(xch, dom,
+                                        ((info.max_pages + nr_mfns - free_pages)
+                                         << (XC_PAGE_SHIFT - 10))) < 0)
+                {
+                    ERROR("Failed xc_domain_setmaxmem for batch (uncanonicalize_pagetable)\n");
+                    errno = ENOMEM;
+                    return 0;
+                }
+            }
             rc = xc_domain_populate_physmap_exact(xch, dom, nr_mfns, 0, 0,
                                                   ctx->p2m_batch);
+        }
 
         if (rc)
         {
-            ERROR("Failed to allocate memory for batch.!\n");
+            ERROR("Failed to allocate memory for batch. rc=%d nr_mfns=%d!\n",
+                  rc, nr_mfns);
             errno = ENOMEM;
             return 0;
         }
@@ -1241,12 +1280,44 @@ static int apply_batch(xc_interface *xch, uint32_t dom, struct restore_ctx *ctx,
         if (!ctx->hvm && ctx->superpages)
             rc = alloc_superpage_mfns(xch, dom, ctx, nr_mfns);
         else
+        {
+            xc_domaininfo_t info;
+            unsigned long free_pages;
+
+            if ((xc_domain_getinfolist(xch, dom, 1, &info) != 1) ||
+                (info.domain != dom)) {
+                ERROR("Failed xc_domain_getinfolist for apply_batch\n");
+                errno = ENOMEM;
+                return -1;
+            }
+            free_pages = info.max_pages - info.tot_pages;
+            if (free_pages > QEMU_SPARE_PAGES) {
+                free_pages -= QEMU_SPARE_PAGES;
+            } else {
+                free_pages = 0;
+            }
+            if (free_pages < nr_mfns)
+            {
+                DPRINTF("Adjust memory for apply_batch: free_pages=%lu nr_mfns=%d max_pages=%lu tot_pages=%lu max_mfn=%lu\n",
+                        free_pages, nr_mfns, (unsigned long)info.max_pages,
+                        (unsigned long)info.tot_pages, ctx->max_mfn);
+                if (xc_domain_setmaxmem(xch, dom,
+                                        ((info.max_pages + nr_mfns - free_pages)
+                                         << (XC_PAGE_SHIFT - 10))) < 0)
+                {
+                    ERROR("Failed xc_domain_setmaxmem for apply_batch\n");
+                    errno = ENOMEM;
+                    return -1;
+                }
+            }
             rc = xc_domain_populate_physmap_exact(xch, dom, nr_mfns, 0, 0,
                                                   ctx->p2m_batch);
+        }
 
         if (rc)
         {
-            ERROR("Failed to allocate memory for batch.!\n"); 
+            ERROR("Failed to allocate memory for apply_batch. rc=%d nr_mfns=%d max_mfn=%lu!\n",
+                  rc, nr_mfns, ctx->max_mfn);
             errno = ENOMEM;
             return -1;
         }
