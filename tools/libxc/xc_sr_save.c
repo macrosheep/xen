@@ -466,6 +466,9 @@ static int send_domain_memory_live(struct xc_sr_context *ctx)
     DECLARE_HYPERCALL_BUFFER_SHADOW(unsigned long, dirty_bitmap,
                                     (&ctx->save.dirty_bitmap_hbuf));
 
+    if ( !ctx->save.live )
+        goto last_iter;
+
     rc = enable_logdirty(ctx);
     if ( rc )
         goto out;
@@ -504,6 +507,7 @@ static int send_domain_memory_live(struct xc_sr_context *ctx)
             goto out;
     }
 
+ last_iter:
     rc = suspend_domain(ctx);
     if ( rc )
         goto out;
@@ -664,35 +668,52 @@ static int save(struct xc_sr_context *ctx, uint16_t guest_type)
     if ( rc )
         goto err;
 
-    rc = ctx->save.ops.start_of_stream(ctx);
-    if ( rc )
-        goto err;
+    do {
+        rc = ctx->save.ops.start_of_stream(ctx);
+        if ( rc )
+            goto err;
 
-    if ( ctx->save.live )
-        rc = send_domain_memory_live(ctx);
-    else
-        rc = send_domain_memory_nonlive(ctx);
+        if ( ctx->save.live || ctx->save.checkpointed )
+            rc = send_domain_memory_live(ctx);
+        else
+            rc = send_domain_memory_nonlive(ctx);
 
-    if ( rc )
-        goto err;
+        if ( rc )
+            goto err;
 
-    if ( !ctx->dominfo.shutdown ||
-         (ctx->dominfo.shutdown_reason != SHUTDOWN_suspend) )
-    {
-        ERROR("Domain has not been suspended");
-        rc = -1;
-        goto err;
-    }
+        if ( !ctx->dominfo.shutdown ||
+             (ctx->dominfo.shutdown_reason != SHUTDOWN_suspend) )
+        {
+            ERROR("Domain has not been suspended");
+            rc = -1;
+            goto err;
+        }
 
-    xc_report_progress_single(xch, "End of stream");
+        xc_report_progress_single(xch, "End of stream");
 
-    rc = ctx->save.ops.end_of_stream(ctx);
-    if ( rc )
-        goto err;
+        rc = ctx->save.ops.end_of_stream(ctx);
+        if ( rc )
+            goto err;
 
-    rc = write_end_record(ctx);
-    if ( rc )
-        goto err;
+        rc = write_end_record(ctx);
+        if ( rc )
+            goto err;
+
+        if ( ctx->save.live ) {
+            /* End of live migration */
+            ctx->save.live = false;
+        }
+
+        if ( ctx->save.checkpointed ) {
+            ctx->save.callbacks->postcopy(ctx->save.callbacks->data);
+
+            rc = ctx->save.callbacks->checkpoint(ctx->save.callbacks->data);
+            if ( rc > 0 )
+                IPRINTF("Checkpointed save");
+            else
+                ctx->save.checkpointed = false;
+        }
+    } while ( ctx->save.checkpointed );
 
     xc_report_progress_single(xch, "Complete");
     goto done;
@@ -720,6 +741,13 @@ int xc_domain_save2(xc_interface *xch, int io_fd, uint32_t dom,
     ctx.save.callbacks = callbacks;
     ctx.save.live  = !!(flags & XCFLAGS_LIVE);
     ctx.save.debug = !!(flags & XCFLAGS_DEBUG);
+    ctx.save.checkpointed = !!(flags & XCFLAGS_CHECKPOINTED);
+
+    if ( ctx.save.checkpointed ) {
+        /* This is a checkpointed save, we need these callbacks */
+        assert(ctx.save.callbacks->postcopy);
+        assert(ctx.save.callbacks->checkpoint);
+    }
 
     /*
      * TODO: Find some time to better tweak the live migration algorithm.

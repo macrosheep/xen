@@ -172,6 +172,12 @@ struct xc_sr_context
             /* Further debugging information in the stream. */
             bool debug;
 
+            /*
+             * Whether it is a checkpointed save, we'll enter checkpointed
+             * save after live migration under Remus.
+             */
+            bool checkpointed;
+
             /* Parameters for tweaking live migration. */
             unsigned max_iterations;
             unsigned dirty_threshold;
