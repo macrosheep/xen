@@ -590,7 +590,7 @@ static int handle_x86_pv_info(struct xc_sr_context *ctx,
     xc_interface *xch = ctx->xch;
     struct xc_sr_rec_x86_pv_info *info = rec->data;
 
-    if ( ctx->x86_pv.restore.seen_pv_info )
+    if ( ctx->x86_pv.restore.seen_pv_info && !ctx->restore.checkpointed )
     {
         ERROR("Already received X86_PV_INFO record");
         return -1;
