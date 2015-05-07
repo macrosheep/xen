@@ -196,6 +196,9 @@ struct xc_sr_context
             struct xc_sr_restore_ops ops;
             struct restore_callbacks *callbacks;
 
+            /* Whether it is a checkpointed stream */
+            bool checkpointed;
+
             /* From Image Header. */
             uint32_t format_version;
 

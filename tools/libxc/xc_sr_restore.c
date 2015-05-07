@@ -3,6 +3,15 @@
 #include "xc_sr_common.h"
 
 /*
+ * With Remus, we buffer the records sent by primary at checkpoint,
+ * in case the primary will fail, we can recover from the last
+ * checkpoint state.
+ * This should be enough because primary only send dirty pages at
+ * checkpoint.
+ */
+#define MAX_RECORDS 1024
+
+/*
  * Read and validate the Image and Domain headers.
  */
 static int read_headers(struct xc_sr_context *ctx)
@@ -519,8 +528,11 @@ extern int read_qemu(struct xc_sr_context *ctx);
 static int restore(struct xc_sr_context *ctx)
 {
     xc_interface *xch = ctx->xch;
-    struct xc_sr_record rec;
-    int rc, saved_rc = 0, saved_errno = 0;
+    struct xc_sr_record *rec;
+    int rc, saved_rc = 0, saved_errno = 0, i;
+    struct xc_sr_record *records[MAX_RECORDS];
+
+    memset(records, 0, MAX_RECORDS*sizeof(void *));
 
     IPRINTF("Restoring domain");
 
@@ -537,17 +549,29 @@ static int restore(struct xc_sr_context *ctx)
         goto err;
     }
 
+    rec = malloc(sizeof(struct xc_sr_record));
+    if (!rec)
+    {
+        ERROR("Unable to allocate memory for record");
+        rc = -1;
+        goto err;
+    }
     do
     {
-        rc = read_record(ctx, &rec);
-        if ( rc )
+        rc = read_record(ctx, rec);
+        if ( rc ) {
+            free(rec);
             goto err;
+        }
 
-        rc = process_record(ctx, &rec);
-        if ( rc )
+        rc = process_record(ctx, rec);
+        if ( rc ) {
+            free(rec);
             goto err;
+        }
 
-    } while ( rec.type != REC_TYPE_END );
+    } while ( rec->type != REC_TYPE_END );
+    free(rec);
 
 #ifdef XG_LIBXL_HVM_COMPAT
     if ( ctx->dominfo.hvm )
@@ -557,7 +581,69 @@ static int restore(struct xc_sr_context *ctx)
             goto err;
     }
 #endif
+    /*
+     * If it is a live migration, this is the end of the live migration
+     * stream
+     * With Remus, we will enter a loop to receive the stream periodically
+     * sent by primary.
+     */
 
+    while ( ctx->restore.checkpointed )
+    {
+        i = 0;
+        do
+        {
+            /* Buffer records */
+            if ( i >= MAX_RECORDS )
+            {
+                ERROR("There are too many records");
+                rc = -1;
+                goto err;
+            }
+
+            rec = malloc(sizeof(struct xc_sr_record));
+            if (!rec)
+            {
+                ERROR("Unable to allocate memory for record");
+                rc = -1;
+                goto err;
+            }
+            rc = read_record(ctx, rec);
+            if ( rc )
+                goto err_buf;
+
+            records[i++] = rec;
+        } while ( rec->type != REC_TYPE_END );
+#ifdef XG_LIBXL_HVM_COMPAT
+        if ( ctx->dominfo.hvm )
+        {
+            rc = read_qemu(ctx);
+            if ( rc )
+                goto err_buf;
+        }
+#endif
+        IPRINTF("All records buffered");
+
+        i = 0;
+        rec = records[i++];
+        while (rec)
+        {
+            rc = process_record(ctx, rec);
+            free(rec);
+            records[i-1] = NULL;
+            if ( rc )
+                goto err;
+
+            rec = records[i++];
+        }
+        IPRINTF("All records processed");
+    }
+
+ err_buf:
+    /*
+     * With Remus, if we reach here, there must be some error on primary,
+     * failover from the last checkpoint state.
+     */
     rc = ctx->restore.ops.stream_complete(ctx);
     if ( rc )
         goto err;
@@ -571,6 +657,13 @@ static int restore(struct xc_sr_context *ctx)
     PERROR("Restore failed");
 
  done:
+    for ( i = 0; i < MAX_RECORDS; i++)
+    {
+        if ( records[i] ) {
+            free(records[i]->data);
+            free(records[i]);
+        }
+    }
     free(ctx->restore.populated_pfns);
     rc = ctx->restore.ops.cleanup(ctx);
     if ( rc )
@@ -605,6 +698,7 @@ int xc_domain_restore2(xc_interface *xch, int io_fd, uint32_t dom,
     ctx.restore.xenstore_evtchn = store_evtchn;
     ctx.restore.xenstore_domid = store_domid;
     ctx.restore.callbacks = callbacks;
+    ctx.restore.checkpointed = checkpointed_stream;
 
     IPRINTF("In experimental %s", __func__);
     DPRINTF("fd %d, dom %u, hvm %u, pae %u, superpages %d"
