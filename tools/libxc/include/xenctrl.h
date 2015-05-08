@@ -296,6 +296,14 @@ typedef struct xc_hypercall_buffer xc_hypercall_buffer_t;
     }
 
 /*
+ * Define a user pointer that can access the hypercall buffer data
+ *
+ * Useful when you only need to access the hypercall buffer data
+ */
+#define DECLARE_HYPERCALL_BUFFER_USER_POINTER(_type, _name, _hbuf)  \
+    _type *_name = _hbuf->hbuf;
+
+/*
  * Declare the necessary data structure to allow a hypercall buffer
  * passed as an argument to a function to be used in the normal way.
  */
