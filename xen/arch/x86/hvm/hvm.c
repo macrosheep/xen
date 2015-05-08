@@ -5710,12 +5710,13 @@ static int hvmop_set_param(
             rc = -EINVAL;
         break;
     case HVM_PARAM_IDENT_PT:
-        rc = -EINVAL;
-        if ( d->arch.hvm_domain.params[a.index] != 0 )
-            break;
-
         rc = 0;
-        if ( !paging_mode_hap(d) )
+        d->arch.hvm_domain.params[a.index] = a.value;
+        /*
+         * Only actually required for VT-x lacking unrestricted_guest
+         * capabilities.  Short circuit the pause if possible.
+         */
+        if ( !paging_mode_hap(d) || !cpu_has_vmx )
             break;
 
         /*
@@ -5729,7 +5730,6 @@ static int hvmop_set_param(
 
         rc = 0;
         domain_pause(d);
-        d->arch.hvm_domain.params[a.index] = a.value;
         for_each_vcpu ( d, v )
             paging_update_cr3(v);
         domain_unpause(d);
