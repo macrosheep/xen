@@ -607,13 +607,10 @@ static int send_domain_memory_nonlive(struct xc_sr_context *ctx)
     return rc;
 }
 
-/*
- * Save a domain.
- */
-static int save(struct xc_sr_context *ctx, uint16_t guest_type)
+static int setup(struct xc_sr_context *ctx)
 {
     xc_interface *xch = ctx->xch;
-    int rc, saved_rc = 0, saved_errno = 0;
+    int rc;
     DECLARE_HYPERCALL_BUFFER_SHADOW(unsigned long, dirty_bitmap,
                                     (&ctx->save.dirty_bitmap_hbuf));
 
@@ -632,12 +629,50 @@ static int save(struct xc_sr_context *ctx, uint16_t guest_type)
         goto err;
     }
 
-    IPRINTF("Saving domain %d, type %s",
-            ctx->domid, dhdr_type_to_str(guest_type));
-
     rc = ctx->save.ops.setup(ctx);
     if ( rc )
         goto err;
+
+    rc = 0;
+
+ err:
+    return rc;
+
+}
+
+static void cleanup(struct xc_sr_context *ctx)
+{
+    xc_interface *xch = ctx->xch;
+    DECLARE_HYPERCALL_BUFFER_SHADOW(unsigned long, dirty_bitmap,
+                                    (&ctx->save.dirty_bitmap_hbuf));
+
+    xc_shadow_control(xch, ctx->domid, XEN_DOMCTL_SHADOW_OP_OFF,
+                      NULL, 0, NULL, 0, NULL);
+
+    if ( ctx->save.ops.cleanup(ctx) )
+        PERROR("Failed to clean up");
+
+    if ( dirty_bitmap )
+        xc_hypercall_buffer_free_pages(xch, dirty_bitmap,
+                                   NRPAGES(bitmap_size(ctx->save.p2m_size)));
+    free(ctx->save.deferred_pages);
+    free(ctx->save.batch_pfns);
+}
+
+/*
+ * Save a domain.
+ */
+static int save(struct xc_sr_context *ctx, uint16_t guest_type)
+{
+    xc_interface *xch = ctx->xch;
+    int rc;
+
+    rc = setup(ctx);
+    if ( rc )
+        goto err;
+
+    IPRINTF("Saving domain %d, type %s",
+            ctx->domid, dhdr_type_to_str(guest_type));
 
     xc_report_progress_single(xch, "Start of stream");
 
@@ -679,29 +714,10 @@ static int save(struct xc_sr_context *ctx, uint16_t guest_type)
     goto done;
 
  err:
-    saved_errno = errno;
-    saved_rc = rc;
     PERROR("Save failed");
 
  done:
-    xc_shadow_control(xch, ctx->domid, XEN_DOMCTL_SHADOW_OP_OFF,
-                      NULL, 0, NULL, 0, NULL);
-
-    rc = ctx->save.ops.cleanup(ctx);
-    if ( rc )
-        PERROR("Failed to clean up");
-
-    xc_hypercall_buffer_free_pages(xch, dirty_bitmap,
-                                   NRPAGES(bitmap_size(ctx->save.p2m_size)));
-    free(ctx->save.deferred_pages);
-    free(ctx->save.batch_pfns);
-
-    if ( saved_rc )
-    {
-        rc = saved_rc;
-        errno = saved_errno;
-    }
-
+    cleanup(ctx);
     return rc;
 };
 
