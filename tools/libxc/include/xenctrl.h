@@ -284,11 +284,15 @@ typedef struct xc_hypercall_buffer xc_hypercall_buffer_t;
  * Useful when a hypercall buffer is passed to a function and access
  * via the user pointer is required.
  *
+ * The shadow xc_hypercall_buffer_t may be unused, add
+ * __attribute__((unused)) to avoid compiler error.
+ *
  * See DECLARE_HYPERCALL_BUFFER_ARGUMENT() if the user pointer is not
  * required.
  */
 #define DECLARE_HYPERCALL_BUFFER_SHADOW(_type, _name, _hbuf)   \
     _type *(_name) = (_hbuf)->hbuf;                            \
+    __attribute__((unused))                                    \
     xc_hypercall_buffer_t XC__HYPERCALL_BUFFER_NAME(_name) = { \
         .hbuf = (void *)-1,                                    \
         .param_shadow = (_hbuf),                               \
