@@ -353,7 +353,9 @@ void xc__hypercall_buffer_free(xc_interface *xch, xc_hypercall_buffer_t *b);
 void *xc__hypercall_buffer_alloc_pages(xc_interface *xch, xc_hypercall_buffer_t *b, int nr_pages);
 #define xc_hypercall_buffer_alloc_pages(_xch, _name, _nr) xc__hypercall_buffer_alloc_pages(_xch, HYPERCALL_BUFFER(_name), _nr)
 void xc__hypercall_buffer_free_pages(xc_interface *xch, xc_hypercall_buffer_t *b, int nr_pages);
-#define xc_hypercall_buffer_free_pages(_xch, _name, _nr) xc__hypercall_buffer_free_pages(_xch, HYPERCALL_BUFFER(_name), _nr)
+#define xc_hypercall_buffer_free_pages(_xch, _name, _nr)        \
+    if ( _name )                                                \
+        xc__hypercall_buffer_free_pages(_xch, HYPERCALL_BUFFER(_name), _nr)
 
 /*
  * Array of hypercall buffers.
