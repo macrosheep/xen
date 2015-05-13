@@ -57,6 +57,16 @@ static int write_end_record(struct xc_sr_context *ctx)
 }
 
 /*
+ * Writes an CHECKPOINT record into the stream.
+ */
+static int write_checkpoint_record(struct xc_sr_context *ctx)
+{
+    struct xc_sr_record checkpoint = { REC_TYPE_CHECKPOINT, 0, NULL };
+
+    return write_record(ctx, &checkpoint);
+}
+
+/*
  * Writes a batch of memory as a PAGE_DATA record into the stream.  The batch
  * is constructed in ctx->save.batch_pfns.
  *
@@ -467,6 +477,14 @@ static int send_domain_memory_live(struct xc_sr_context *ctx)
     DECLARE_HYPERCALL_BUFFER_SHADOW(unsigned long, dirty_bitmap,
                                     &ctx->save.dirty_bitmap_hbuf);
 
+    /*
+     * With Remus, we will enter checkpointed save after live migration.
+     * In checkpointed save loop, we skip the live part and pause straight
+     * away to send dirty pages between checkpoints.
+     */
+    if ( !ctx->save.live )
+        goto last_iter;
+
     rc = enable_logdirty(ctx);
     if ( rc )
         goto out;
@@ -505,6 +523,7 @@ static int send_domain_memory_live(struct xc_sr_context *ctx)
             goto out;
     }
 
+ last_iter:
     rc = suspend_domain(ctx);
     if ( rc )
         goto out;
@@ -667,29 +686,52 @@ static int save(struct xc_sr_context *ctx, uint16_t guest_type)
     if ( rc )
         goto err;
 
-    rc = ctx->save.ops.start_of_checkpoint(ctx);
-    if ( rc )
-        goto err;
+    do {
+        rc = ctx->save.ops.start_of_checkpoint(ctx);
+        if ( rc )
+            goto err;
 
-    if ( ctx->save.live )
-        rc = send_domain_memory_live(ctx);
-    else
-        rc = send_domain_memory_nonlive(ctx);
+        if ( ctx->save.live || ctx->save.checkpointed )
+            rc = send_domain_memory_live(ctx);
+        else
+            rc = send_domain_memory_nonlive(ctx);
 
-    if ( rc )
-        goto err;
+        if ( rc )
+            goto err;
 
-    if ( !ctx->dominfo.shutdown ||
-         (ctx->dominfo.shutdown_reason != SHUTDOWN_suspend) )
-    {
-        ERROR("Domain has not been suspended");
-        rc = -1;
-        goto err;
-    }
+        if ( !ctx->dominfo.shutdown ||
+            (ctx->dominfo.shutdown_reason != SHUTDOWN_suspend) )
+        {
+            ERROR("Domain has not been suspended");
+            rc = -1;
+            goto err;
+        }
 
-    rc = ctx->save.ops.end_of_checkpoint(ctx);
-    if ( rc )
-        goto err;
+        rc = ctx->save.ops.end_of_checkpoint(ctx);
+        if ( rc )
+            goto err;
+
+        if ( ctx->save.checkpointed )
+        {
+            if ( ctx->save.live )
+            {
+                /* End of live migration, we are sending checkpointed stream */
+                ctx->save.live = false;
+            }
+
+            rc = write_checkpoint_record(ctx);
+            if ( rc )
+                goto err;
+
+            ctx->save.callbacks->postcopy(ctx->save.callbacks->data);
+
+            rc = ctx->save.callbacks->checkpoint(ctx->save.callbacks->data);
+            if ( rc > 0 )
+                xc_report_progress_single(xch, "Checkpointed save");
+            else
+                ctx->save.checkpointed = false;
+        }
+    } while ( ctx->save.checkpointed );
 
     xc_report_progress_single(xch, "End of stream");
 
