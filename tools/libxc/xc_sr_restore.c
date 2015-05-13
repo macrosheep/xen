@@ -468,10 +468,68 @@ static int handle_page_data(struct xc_sr_context *ctx, struct xc_sr_record *rec)
     return rc;
 }
 
+static int process_record(struct xc_sr_context *ctx, struct xc_sr_record *rec);
+static int handle_checkpoint(struct xc_sr_context *ctx)
+{
+    xc_interface *xch = ctx->xch;
+    int rc = 0;
+    unsigned i;
+
+    if ( !ctx->restore.checkpointed )
+    {
+        ERROR("Found checkpoint in non-checkpointed stream");
+        rc = -1;
+        goto err;
+    }
+
+    if ( ctx->restore.buffer_all_records )
+    {
+        IPRINTF("All records buffered");
+
+        /*
+         * We need to set buffer_all_records to false in
+         * order to process records instead of buffer records.
+         * buffer_all_records should be set back to true after
+         * we successfully processed all records.
+         */
+        ctx->restore.buffer_all_records = false;
+        for ( i = 0; i < ctx->restore.buffered_rec_num; i++ )
+        {
+            rc = process_record(ctx, &ctx->restore.buffered_records[i]);
+            if ( rc )
+                goto err;
+        }
+        ctx->restore.buffered_rec_num = 0;
+        ctx->restore.buffer_all_records = true;
+        IPRINTF("All records processed");
+    }
+    else
+        ctx->restore.buffer_all_records = true;
+
+ err:
+    return rc;
+}
+
 static int process_record(struct xc_sr_context *ctx, struct xc_sr_record *rec)
 {
     xc_interface *xch = ctx->xch;
     int rc = 0;
+
+    if ( ctx->restore.buffer_all_records &&
+         rec->type != REC_TYPE_END &&
+         rec->type != REC_TYPE_CHECKPOINT )
+    {
+        if ( ctx->restore.buffered_rec_num >= MAX_BUF_RECORDS )
+        {
+            ERROR("There are too many records within a checkpoint");
+            return -1;
+        }
+
+        memcpy(&ctx->restore.buffered_records[ctx->restore.buffered_rec_num++],
+               rec, sizeof(*rec));
+
+        return 0;
+    }
 
     switch ( rec->type )
     {
@@ -487,12 +545,17 @@ static int process_record(struct xc_sr_context *ctx, struct xc_sr_record *rec)
         ctx->restore.verify = true;
         break;
 
+    case REC_TYPE_CHECKPOINT:
+        rc = handle_checkpoint(ctx);
+        break;
+
     default:
         rc = ctx->restore.ops.process_record(ctx, rec);
         break;
     }
 
     free(rec->data);
+    rec->data = NULL;
 
     if ( rc == RECORD_NOT_PROCESSED )
     {
@@ -529,6 +592,15 @@ static int setup(struct xc_sr_context *ctx)
         goto err;
     }
 
+    ctx->restore.buffered_records = malloc(
+        MAX_BUF_RECORDS * sizeof(struct xc_sr_record));
+    if ( !ctx->restore.buffered_records )
+    {
+        ERROR("Unable to allocate memory for buffered records");
+        rc = -1;
+        goto err;
+    }
+
  err:
     return rc;
 }
@@ -536,7 +608,12 @@ static int setup(struct xc_sr_context *ctx)
 static void cleanup(struct xc_sr_context *ctx)
 {
     xc_interface *xch = ctx->xch;
+    unsigned i;
 
+    for ( i = 0; i < ctx->restore.buffered_rec_num; i++ )
+        free(ctx->restore.buffered_records[i].data);
+
+    free(ctx->restore.buffered_records);
     free(ctx->restore.populated_pfns);
     if ( ctx->restore.ops.cleanup(ctx) )
         PERROR("Failed to clean up");
@@ -564,7 +641,27 @@ static int restore(struct xc_sr_context *ctx)
     {
         rc = read_record(ctx, &rec);
         if ( rc )
-            goto err;
+        {
+            if ( ctx->restore.buffer_all_records )
+                goto remus_failover;
+            else
+                goto err;
+        }
+
+#ifdef XG_LIBXL_HVM_COMPAT
+        if ( ctx->dominfo.hvm &&
+             (rec.type == REC_TYPE_END || rec.type == REC_TYPE_CHECKPOINT) )
+        {
+            rc = read_qemu(ctx);
+            if ( rc )
+            {
+                if ( ctx->restore.buffer_all_records )
+                    goto remus_failover;
+                else
+                    goto err;
+            }
+        }
+#endif
 
         rc = process_record(ctx, &rec);
         if ( rc )
@@ -572,15 +669,11 @@ static int restore(struct xc_sr_context *ctx)
 
     } while ( rec.type != REC_TYPE_END );
 
-#ifdef XG_LIBXL_HVM_COMPAT
-    if ( ctx->dominfo.hvm )
-    {
-        rc = read_qemu(ctx);
-        if ( rc )
-            goto err;
-    }
-#endif
-
+ remus_failover:
+    /*
+     * With Remus, if we reach here, there must be some error on primary,
+     * failover from the last checkpoint state.
+     */
     rc = ctx->restore.ops.stream_complete(ctx);
     if ( rc )
         goto err;
