@@ -468,10 +468,83 @@ static int handle_page_data(struct xc_sr_context *ctx, struct xc_sr_record *rec)
     return rc;
 }
 
+static int process_record(struct xc_sr_context *ctx, struct xc_sr_record *rec);
+static int handle_checkpoint(struct xc_sr_context *ctx)
+{
+    xc_interface *xch = ctx->xch;
+    int rc = 0, i;
+    struct xc_sr_record *rec;
+
+    if ( !ctx->restore.checkpointed )
+    {
+        ERROR("Found checkpoint in non-checkpointed stream");
+        rc = -1;
+        goto err;
+    }
+
+    if ( ctx->restore.buffer_all_records )
+    {
+        IPRINTF("All records buffered");
+
+        /*
+         * We need to set buffer_all_records to false in
+         * order to process records instead of buffer records.
+         * buffer_all_records should be set back to true after
+         * we successfully processed all records.
+         */
+        ctx->restore.buffer_all_records = false;
+        i = 0;
+        rec = ctx->restore.buffered_records[i++];
+        while (rec)
+        {
+            rc = process_record(ctx, rec);
+            free(rec);
+            ctx->restore.buffered_records[i-1] = NULL;
+            if ( rc )
+                goto err;
+
+            rec = ctx->restore.buffered_records[i++];
+        }
+        IPRINTF("All records processed");
+        ctx->restore.buffer_all_records = true;
+    }
+    else
+        ctx->restore.buffer_all_records = true;
+
+ err:
+    return rc;
+}
+
 static int process_record(struct xc_sr_context *ctx, struct xc_sr_record *rec)
 {
     xc_interface *xch = ctx->xch;
-    int rc = 0;
+    int rc = 0, i;
+    struct xc_sr_record *buf_rec;
+
+    if ( ctx->restore.buffer_all_records &&
+         rec->type != REC_TYPE_END &&
+         rec->type != REC_TYPE_CHECKPOINT )
+    {
+        buf_rec = malloc(sizeof(struct xc_sr_record));
+        if (!buf_rec)
+        {
+            ERROR("Unable to allocate memory for record");
+            return -1;
+        }
+        memcpy(buf_rec, rec, sizeof(struct xc_sr_record));
+
+        for ( i = 0; i < MAX_BUF_RECORDS; i++ )
+            if ( !ctx->restore.buffered_records[i] )
+                break;
+
+        if ( i >= MAX_BUF_RECORDS )
+        {
+            ERROR("There are too many records within a checkpoint");
+            return -1;
+        }
+        ctx->restore.buffered_records[i] = buf_rec;
+        return 0;
+    }
 
     switch ( rec->type )
     {
@@ -485,6 +558,10 @@ static int process_record(struct xc_sr_context *ctx, struct xc_sr_record *rec)
     case REC_TYPE_VERIFY:
         DPRINTF("Verify mode enabled");
         ctx->restore.verify = true;
+        break;
+
+    case REC_TYPE_CHECKPOINT:
+        rc = handle_checkpoint(ctx);
         break;
 
     default:
@@ -520,7 +597,7 @@ static int restore(struct xc_sr_context *ctx)
 {
     xc_interface *xch = ctx->xch;
     struct xc_sr_record rec;
-    int rc, saved_rc = 0, saved_errno = 0;
+    int rc, saved_rc = 0, saved_errno = 0, i;
 
     IPRINTF("Restoring domain");
 
@@ -541,7 +618,27 @@ static int restore(struct xc_sr_context *ctx)
     {
         rc = read_record(ctx, &rec);
         if ( rc )
-            goto err;
+        {
+            if ( ctx->restore.buffer_all_records )
+                goto err_buf;
+            else
+                goto err;
+        }
+
+#ifdef XG_LIBXL_HVM_COMPAT
+        if ( ctx->dominfo.hvm &&
+             (rec.type == REC_TYPE_END || rec.type == REC_TYPE_CHECKPOINT) )
+        {
+            rc = read_qemu(ctx);
+            if ( rc )
+            {
+                if ( ctx->restore.buffer_all_records )
+                    goto err_buf;
+                else
+                    goto err;
+            }
+        }
+#endif
 
         rc = process_record(ctx, &rec);
         if ( rc )
@@ -549,15 +646,11 @@ static int restore(struct xc_sr_context *ctx)
 
     } while ( rec.type != REC_TYPE_END );
 
-#ifdef XG_LIBXL_HVM_COMPAT
-    if ( ctx->dominfo.hvm )
-    {
-        rc = read_qemu(ctx);
-        if ( rc )
-            goto err;
-    }
-#endif
-
+ err_buf:
+    /*
+     * With Remus, if we reach here, there must be some error on primary,
+     * failover from the last checkpoint state.
+     */
     rc = ctx->restore.ops.stream_complete(ctx);
     if ( rc )
         goto err;
@@ -571,6 +664,13 @@ static int restore(struct xc_sr_context *ctx)
     PERROR("Restore failed");
 
  done:
+    for ( i = 0; i < MAX_BUF_RECORDS; i++)
+    {
+        if ( ctx->restore.buffered_records[i] ) {
+            free(ctx->restore.buffered_records[i]->data);
+            free(ctx->restore.buffered_records[i]);
+        }
+    }
     free(ctx->restore.populated_pfns);
     rc = ctx->restore.ops.cleanup(ctx);
     if ( rc )
