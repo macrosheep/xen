@@ -1103,8 +1103,8 @@ int libxl__toolstack_restore(uint32_t domid, const uint8_t *buf,
 
 /*==================== Domain suspend (save) ====================*/
 
-static void domain_suspend_done(libxl__egc *egc,
-                        libxl__domain_suspend_state *dss, int rc);
+static void domain_save_done(libxl__egc *egc,
+                             libxl__domain_save_state *dss, int rc);
 static void domain_suspend_callback_common_done(libxl__egc *egc,
                                 libxl__domain_suspend_state *dss, int ok);
 
@@ -1123,7 +1123,7 @@ static void switch_logdirty_timeout(libxl__egc *egc, libxl__ev_time *ev,
 static void switch_logdirty_xswatch(libxl__egc *egc, libxl__ev_xswatch*,
                             const char *watch_path, const char *event_path);
 static void switch_logdirty_done(libxl__egc *egc,
-                                 libxl__domain_suspend_state *dss, int ok);
+                                 libxl__domain_save_state *dss, int ok);
 
 static void logdirty_init(libxl__logdirty_switch *lds)
 {
@@ -1137,7 +1137,7 @@ static void domain_suspend_switch_qemu_xen_traditional_logdirty
                                 libxl__save_helper_state *shs)
 {
     libxl__egc *egc = shs->egc;
-    libxl__domain_suspend_state *dss = CONTAINER_OF(shs, *dss, shs);
+    libxl__domain_save_state *dss = CONTAINER_OF(shs, *dss, shs);
     libxl__logdirty_switch *lds = &dss->logdirty;
     STATE_AO_GC(dss->ao);
     int rc;
@@ -1209,7 +1209,7 @@ static void domain_suspend_switch_qemu_xen_logdirty
                                 libxl__save_helper_state *shs)
 {
     libxl__egc *egc = shs->egc;
-    libxl__domain_suspend_state *dss = CONTAINER_OF(shs, *dss, shs);
+    libxl__domain_save_state *dss = CONTAINER_OF(shs, *dss, shs);
     STATE_AO_GC(dss->ao);
     int rc;
 
@@ -1227,7 +1227,7 @@ void libxl__domain_suspend_common_switch_qemu_logdirty
 {
     libxl__save_helper_state *shs = user;
     libxl__egc *egc = shs->egc;
-    libxl__domain_suspend_state *dss = CONTAINER_OF(shs, *dss, shs);
+    libxl__domain_save_state *dss = CONTAINER_OF(shs, *dss, shs);
     STATE_AO_GC(dss->ao);
 
     switch (libxl__device_model_version_running(gc, domid)) {
@@ -1246,7 +1246,7 @@ void libxl__domain_suspend_common_switch_qemu_logdirty
 static void switch_logdirty_timeout(libxl__egc *egc, libxl__ev_time *ev,
                                     const struct timeval *requested_abs)
 {
-    libxl__domain_suspend_state *dss = CONTAINER_OF(ev, *dss, logdirty.timeout);
+    libxl__domain_save_state *dss = CONTAINER_OF(ev, *dss, logdirty.timeout);
     STATE_AO_GC(dss->ao);
     LOG(ERROR,"logdirty switch: wait for device model timed out");
     switch_logdirty_done(egc,dss,-1);
@@ -1255,7 +1255,7 @@ static void switch_logdirty_timeout(libxl__egc *egc, libxl__ev_time *ev,
 static void switch_logdirty_xswatch(libxl__egc *egc, libxl__ev_xswatch *watch,
                             const char *watch_path, const char *event_path)
 {
-    libxl__domain_suspend_state *dss =
+    libxl__domain_save_state *dss =
         CONTAINER_OF(watch, *dss, logdirty.watch);
     libxl__logdirty_switch *lds = &dss->logdirty;
     STATE_AO_GC(dss->ao);
@@ -1310,7 +1310,7 @@ static void switch_logdirty_xswatch(libxl__egc *egc, libxl__ev_xswatch *watch,
 }
 
 static void switch_logdirty_done(libxl__egc *egc,
-                                 libxl__domain_suspend_state *dss,
+                                 libxl__domain_save_state *dss,
                                  int broke)
 {
     STATE_AO_GC(dss->ao);
@@ -1762,16 +1762,18 @@ static void libxl__domain_suspend_callback(void *data)
 {
     libxl__save_helper_state *shs = data;
     libxl__egc *egc = shs->egc;
-    libxl__domain_suspend_state *dss = CONTAINER_OF(shs, *dss, shs);
+    libxl__domain_save_state *dss = CONTAINER_OF(shs, *dss, shs);
+    libxl__domain_suspend_state *dss2 = &dss->dss;
 
-    dss->callback_common_done = domain_suspend_callback_common_done;
-    domain_suspend_callback_common(egc, dss);
+    dss2->callback_common_done = domain_suspend_callback_common_done;
+    domain_suspend_callback_common(egc, dss2);
 }
 
 static void domain_suspend_callback_common_done(libxl__egc *egc,
                                 libxl__domain_suspend_state *dss, int ok)
 {
-    libxl__xc_domain_saverestore_async_callback_done(egc, &dss->shs, ok);
+    libxl__domain_save_state *dsvs = CONTAINER_OF(dss, *dsvs, dss);
+    libxl__xc_domain_saverestore_async_callback_done(egc, &dsvs->shs, ok);
 }
 
 /*----- remus callbacks -----*/
@@ -1788,25 +1790,28 @@ static void libxl__remus_domain_suspend_callback(void *data)
 {
     libxl__save_helper_state *shs = data;
     libxl__egc *egc = shs->egc;
-    libxl__domain_suspend_state *dss = CONTAINER_OF(shs, *dss, shs);
+    libxl__domain_save_state *dss = CONTAINER_OF(shs, *dss, shs);
+    libxl__domain_suspend_state *dss2 = &dss->dss;
 
-    dss->callback_common_done = remus_domain_suspend_callback_common_done;
-    domain_suspend_callback_common(egc, dss);
+    dss2->callback_common_done = remus_domain_suspend_callback_common_done;
+    domain_suspend_callback_common(egc, dss2);
 }
 
 static void remus_domain_suspend_callback_common_done(libxl__egc *egc,
                                 libxl__domain_suspend_state *dss, int ok)
 {
+    libxl__domain_save_state *dsvs = CONTAINER_OF(dss, *dsvs, dss);
+
     if (!ok)
         goto out;
 
-    libxl__remus_devices_state *const rds = &dss->rds;
+    libxl__remus_devices_state *const rds = &dsvs->rds;
     rds->callback = remus_devices_postsuspend_cb;
     libxl__remus_devices_postsuspend(egc, rds);
     return;
 
 out:
-    libxl__xc_domain_saverestore_async_callback_done(egc, &dss->shs, ok);
+    libxl__xc_domain_saverestore_async_callback_done(egc, &dsvs->shs, ok);
 }
 
 static void remus_devices_postsuspend_cb(libxl__egc *egc,
@@ -1814,7 +1819,7 @@ static void remus_devices_postsuspend_cb(libxl__egc *egc,
                                          int rc)
 {
     int ok = 0;
-    libxl__domain_suspend_state *dss = CONTAINER_OF(rds, *dss, rds);
+    libxl__domain_save_state *dss = CONTAINER_OF(rds, *dss, rds);
 
     if (rc)
         goto out;
@@ -1829,7 +1834,7 @@ static void libxl__remus_domain_resume_callback(void *data)
 {
     libxl__save_helper_state *shs = data;
     libxl__egc *egc = shs->egc;
-    libxl__domain_suspend_state *dss = CONTAINER_OF(shs, *dss, shs);
+    libxl__domain_save_state *dss = CONTAINER_OF(shs, *dss, shs);
     STATE_AO_GC(dss->ao);
 
     libxl__remus_devices_state *const rds = &dss->rds;
@@ -1842,7 +1847,7 @@ static void remus_devices_preresume_cb(libxl__egc *egc,
                                        int rc)
 {
     int ok = 0;
-    libxl__domain_suspend_state *dss = CONTAINER_OF(rds, *dss, rds);
+    libxl__domain_save_state *dss = CONTAINER_OF(rds, *dss, rds);
     STATE_AO_GC(dss->ao);
 
     if (rc)
@@ -1862,7 +1867,7 @@ out:
 /*----- remus asynchronous checkpoint callback -----*/
 
 static void remus_checkpoint_dm_saved(libxl__egc *egc,
-                                      libxl__domain_suspend_state *dss, int rc);
+                                      libxl__domain_save_state *dss, int rc);
 static void remus_devices_commit_cb(libxl__egc *egc,
                                     libxl__remus_devices_state *rds,
                                     int rc);
@@ -1872,7 +1877,7 @@ static void remus_next_checkpoint(libxl__egc *egc, libxl__ev_time *ev,
 static void libxl__remus_domain_checkpoint_callback(void *data)
 {
     libxl__save_helper_state *shs = data;
-    libxl__domain_suspend_state *dss = CONTAINER_OF(shs, *dss, shs);
+    libxl__domain_save_state *dss = CONTAINER_OF(shs, *dss, shs);
     libxl__egc *egc = dss->shs.egc;
     STATE_AO_GC(dss->ao);
 
@@ -1885,7 +1890,7 @@ static void libxl__remus_domain_checkpoint_callback(void *data)
 }
 
 static void remus_checkpoint_dm_saved(libxl__egc *egc,
-                                      libxl__domain_suspend_state *dss, int rc)
+                                      libxl__domain_save_state *dss, int rc)
 {
     /* Convenience aliases */
     libxl__remus_devices_state *const rds = &dss->rds;
@@ -1910,7 +1915,7 @@ static void remus_devices_commit_cb(libxl__egc *egc,
                                     libxl__remus_devices_state *rds,
                                     int rc)
 {
-    libxl__domain_suspend_state *dss = CONTAINER_OF(rds, *dss, rds);
+    libxl__domain_save_state *dss = CONTAINER_OF(rds, *dss, rds);
 
     STATE_AO_GC(dss->ao);
 
@@ -1944,7 +1949,7 @@ out:
 static void remus_next_checkpoint(libxl__egc *egc, libxl__ev_time *ev,
                                   const struct timeval *requested_abs)
 {
-    libxl__domain_suspend_state *dss =
+    libxl__domain_save_state *dss =
                             CONTAINER_OF(ev, *dss, checkpoint_timeout);
 
     STATE_AO_GC(dss->ao);
@@ -1957,9 +1962,9 @@ static void remus_next_checkpoint(libxl__egc *egc, libxl__ev_time *ev,
     libxl__xc_domain_saverestore_async_callback_done(egc, &dss->shs, 1);
 }
 
-/*----- main code for suspending, in order of execution -----*/
+/*----- main code for saving, in order of execution -----*/
 
-void libxl__domain_suspend(libxl__egc *egc, libxl__domain_suspend_state *dss)
+void libxl__domain_save(libxl__egc *egc, libxl__domain_save_state *dss)
 {
     STATE_AO_GC(dss->ao);
     int port;
@@ -1973,20 +1978,23 @@ void libxl__domain_suspend(libxl__egc *egc, libxl__domain_suspend_state *dss)
     const libxl_domain_remus_info *const r_info = dss->remus;
     libxl__srm_save_autogen_callbacks *const callbacks =
         &dss->shs.callbacks.save.a;
+    libxl__domain_suspend_state *dss2 = &dss->dss;
 
     logdirty_init(&dss->logdirty);
-    libxl__xswait_init(&dss->pvcontrol);
-    libxl__ev_evtchn_init(&dss->guest_evtchn);
-    libxl__ev_xswatch_init(&dss->guest_watch);
-    libxl__ev_time_init(&dss->guest_timeout);
+    libxl__xswait_init(&dss2->pvcontrol);
+    libxl__ev_evtchn_init(&dss2->guest_evtchn);
+    libxl__ev_xswatch_init(&dss2->guest_watch);
+    libxl__ev_time_init(&dss2->guest_timeout);
 
     switch (type) {
     case LIBXL_DOMAIN_TYPE_HVM: {
         dss->hvm = 1;
+        dss2->hvm = 1;
         break;
     }
     case LIBXL_DOMAIN_TYPE_PV:
         dss->hvm = 0;
+        dss2->hvm = 0;
         break;
     default:
         abort();
@@ -1996,10 +2004,12 @@ void libxl__domain_suspend(libxl__egc *egc, libxl__domain_suspend_state *dss)
           | (debug ? XCFLAGS_DEBUG : 0)
           | (dss->hvm ? XCFLAGS_HVM : 0);
 
-    dss->guest_evtchn.port = -1;
-    dss->guest_evtchn_lockfd = -1;
-    dss->guest_responded = 0;
-    dss->dm_savefile = libxl__device_model_savefile(gc, domid);
+    dss2->guest_evtchn.port = -1;
+    dss2->guest_evtchn_lockfd = -1;
+    dss2->guest_responded = 0;
+    dss2->dm_savefile = libxl__device_model_savefile(gc, domid);
+    dss2->domid = domid;
+    dss2->ao = ao;
 
     if (r_info != NULL) {
         dss->interval = r_info->interval;
@@ -2008,17 +2018,17 @@ void libxl__domain_suspend(libxl__egc *egc, libxl__domain_suspend_state *dss)
             dss->xcflags |= XCFLAGS_CHECKPOINT_COMPRESS;
     }
 
-    port = xs_suspend_evtchn_port(dss->domid);
+    port = xs_suspend_evtchn_port(dss2->domid);
 
     if (port >= 0) {
         rc = libxl__ctx_evtchn_init(gc);
         if (rc) goto out;
 
-        dss->guest_evtchn.port =
+        dss2->guest_evtchn.port =
             xc_suspend_evtchn_init_exclusive(CTX->xch, CTX->xce,
-                                  dss->domid, port, &dss->guest_evtchn_lockfd);
+                                  dss2->domid, port, &dss2->guest_evtchn_lockfd);
 
-        if (dss->guest_evtchn.port < 0) {
+        if (dss2->guest_evtchn.port < 0) {
             LOG(WARN, "Suspend event channel initialization failed");
             rc = ERROR_FAIL;
             goto out;
@@ -2040,27 +2050,28 @@ void libxl__domain_suspend(libxl__egc *egc, libxl__domain_suspend_state *dss)
     return;
 
  out:
-    domain_suspend_done(egc, dss, rc);
+    domain_save_done(egc, dss, rc);
 }
 
 void libxl__xc_domain_save_done(libxl__egc *egc, void *dss_void,
                                 int rc, int retval, int errnoval)
 {
-    libxl__domain_suspend_state *dss = dss_void;
+    libxl__domain_save_state *dss = dss_void;
     STATE_AO_GC(dss->ao);
 
     /* Convenience aliases */
     const libxl_domain_type type = dss->type;
+    libxl__domain_suspend_state *dss2 = &dss->dss;
 
     if (rc)
         goto out;
 
     if (retval) {
         LOGEV(ERROR, errnoval, "saving domain: %s",
-                         dss->guest_responded ?
+                         dss2->guest_responded ?
                          "domain responded to suspend request" :
                          "domain did not respond to suspend request");
-        if ( !dss->guest_responded )
+        if ( !dss2->guest_responded )
             rc = ERROR_GUEST_TIMEDOUT;
         else
             rc = ERROR_FAIL;
@@ -2068,24 +2079,24 @@ void libxl__xc_domain_save_done(libxl__egc *egc, void *dss_void,
     }
 
     if (type == LIBXL_DOMAIN_TYPE_HVM) {
-        rc = libxl__domain_suspend_device_model(gc, dss);
+        rc = libxl__domain_suspend_device_model(gc, dss2);
         if (rc) goto out;
 
-        libxl__domain_save_device_model(egc, dss, domain_suspend_done);
+        libxl__domain_save_device_model(egc, dss, domain_save_done);
         return;
     }
 
     rc = 0;
 
 out:
-    domain_suspend_done(egc, dss, rc);
+    domain_save_done(egc, dss, rc);
 }
 
 static void save_device_model_datacopier_done(libxl__egc *egc,
      libxl__datacopier_state *dc, int onwrite, int errnoval);
 
 void libxl__domain_save_device_model(libxl__egc *egc,
-                                     libxl__domain_suspend_state *dss,
+                                     libxl__domain_save_state *dss,
                                      libxl__save_device_model_cb *callback)
 {
     STATE_AO_GC(dss->ao);
@@ -2096,7 +2107,7 @@ void libxl__domain_save_device_model(libxl__egc *egc,
     dss->save_dm_callback = callback;
 
     /* Convenience aliases */
-    const char *const filename = dss->dm_savefile;
+    const char *const filename = dss->dss.dm_savefile;
     const int fd = dss->fd;
 
     libxl__datacopier_state *dc = &dss->save_dm_datacopier;
@@ -2148,12 +2159,12 @@ void libxl__domain_save_device_model(libxl__egc *egc,
 static void save_device_model_datacopier_done(libxl__egc *egc,
      libxl__datacopier_state *dc, int onwrite, int errnoval)
 {
-    libxl__domain_suspend_state *dss =
+    libxl__domain_save_state *dss =
         CONTAINER_OF(dc, *dss, save_dm_datacopier);
     STATE_AO_GC(dss->ao);
 
     /* Convenience aliases */
-    const char *const filename = dss->dm_savefile;
+    const char *const filename = dss->dss.dm_savefile;
     int our_rc = 0;
     int rc;
 
@@ -2177,19 +2188,20 @@ static void remus_teardown_done(libxl__egc *egc,
                                        libxl__remus_devices_state *rds,
                                        int rc);
 
-static void domain_suspend_done(libxl__egc *egc,
-                        libxl__domain_suspend_state *dss, int rc)
+static void domain_save_done(libxl__egc *egc,
+                        libxl__domain_save_state *dss, int rc)
 {
     STATE_AO_GC(dss->ao);
 
     /* Convenience aliases */
     const uint32_t domid = dss->domid;
+    libxl__domain_suspend_state *dss2 = &dss->dss;
 
-    libxl__ev_evtchn_cancel(gc, &dss->guest_evtchn);
+    libxl__ev_evtchn_cancel(gc, &dss2->guest_evtchn);
 
-    if (dss->guest_evtchn.port > 0)
+    if (dss2->guest_evtchn.port > 0)
         xc_suspend_evtchn_release(CTX->xch, CTX->xce, domid,
-                           dss->guest_evtchn.port, &dss->guest_evtchn_lockfd);
+                           dss2->guest_evtchn.port, &dss2->guest_evtchn_lockfd);
 
     if (!dss->remus) {
         dss->callback(egc, dss, rc);
@@ -2212,7 +2224,7 @@ static void remus_teardown_done(libxl__egc *egc,
                                        libxl__remus_devices_state *rds,
                                        int rc)
 {
-    libxl__domain_suspend_state *dss = CONTAINER_OF(rds, *dss, rds);
+    libxl__domain_save_state *dss = CONTAINER_OF(rds, *dss, rds);
     STATE_AO_GC(dss->ao);
 
     if (rc)
