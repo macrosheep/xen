@@ -3202,6 +3202,16 @@ void libxl__domain_suspend_callback(void *data);
 void libxl__domain_suspend(libxl__egc *egc,
                            libxl__domain_suspend_state *dss);
 
+/* Remus callbacks for save */
+void libxl__remus_domain_suspend_callback(void *data);
+void libxl__remus_domain_resume_callback(void *data);
+void libxl__remus_domain_checkpoint_callback(void *data);
+/* Remus setup and teardown*/
+void libxl__remus_setup(libxl__egc *egc, libxl__domain_save_state *dss);
+void libxl__remus_teardown(libxl__egc *egc,
+                           libxl__domain_save_state *dss,
+                           int rc);
+
 
 /*
  * Convenience macros.
