@@ -3196,6 +3196,12 @@ _hidden void libxl__domain_save_device_model(libxl__egc *egc,
 
 _hidden const char *libxl__device_model_savefile(libxl__gc *gc, uint32_t domid);
 
+void libxl__domain_suspend_callback(void *data);
+
+/* calls dss->callback_common_done when done */
+void libxl__domain_suspend(libxl__egc *egc,
+                           libxl__domain_suspend_state *dss);
+
 
 /*
  * Convenience macros.
