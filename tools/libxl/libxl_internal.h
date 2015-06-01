@@ -1043,6 +1043,7 @@ _hidden int libxl__userdata_store(libxl__gc *gc, uint32_t domid,
                                   const char *userdata_userid,
                                   const uint8_t *data, int datalen);
 
+_hidden int libxl__domain_restore(libxl__gc *gc, uint32_t domid);
 _hidden int libxl__domain_resume(libxl__gc *gc, uint32_t domid,
                                  int suspend_cancel);
 
@@ -1654,6 +1655,8 @@ _hidden int libxl__qmp_stop(libxl__gc *gc, int domid);
 _hidden int libxl__qmp_resume(libxl__gc *gc, int domid);
 /* Save current QEMU state into fd. */
 _hidden int libxl__qmp_save(libxl__gc *gc, int domid, const char *filename);
+/* Load current QEMU state from fd. */
+_hidden int libxl__qmp_restore(libxl__gc *gc, int domid, const char *filename);
 /* Set dirty bitmap logging status */
 _hidden int libxl__qmp_set_global_dirty_log(libxl__gc *gc, int domid, bool enable);
 _hidden int libxl__qmp_insert_cdrom(libxl__gc *gc, int domid, const libxl_device_disk *disk);
