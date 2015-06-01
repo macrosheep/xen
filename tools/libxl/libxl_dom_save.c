@@ -676,6 +676,26 @@ out:
     return ret;
 }
 
+int libxl__domain_restore_device_model(libxl__gc *gc, uint32_t domid,
+                                       const char *state_file)
+{
+    int rc;
+
+    switch (libxl__device_model_version_running(gc, domid)) {
+    case LIBXL_DEVICE_MODEL_VERSION_QEMU_XEN_TRADITIONAL:
+        /* not supported now */
+        rc = ERROR_INVAL;
+        break;
+    case LIBXL_DEVICE_MODEL_VERSION_QEMU_XEN:
+        rc = libxl__qmp_restore(gc, domid, state_file);
+        break;
+    default:
+        rc = ERROR_INVAL;
+    }
+
+    return rc;
+}
+
 /*
  * Local variables:
  * mode: C
