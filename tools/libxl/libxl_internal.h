@@ -2909,6 +2909,11 @@ static inline bool libxl__stream_write_inuse(
 }
 
 typedef struct libxl__logdirty_switch {
+    /* set by caller of libxl__domain_common_switch_qemu_logdirty */
+    libxl__ao *ao;
+    void (*callback)(libxl__egc *egc, struct libxl__logdirty_switch *lds,
+                     int rc);
+
     const char *cmd;
     const char *cmd_path;
     const char *ret_path;
@@ -3300,6 +3305,9 @@ void libxl__xc_domain_saverestore_async_callback_done(libxl__egc *egc,
 
 _hidden void libxl__domain_suspend_common_switch_qemu_logdirty
                                (int domid, unsigned int enable, void *data);
+_hidden void libxl__domain_common_switch_qemu_logdirty(libxl__egc *egc,
+                                               int domid, unsigned enable,
+                                               libxl__logdirty_switch *lds);
 _hidden int libxl__toolstack_save(uint32_t domid, uint8_t **buf,
         uint32_t *len, void *data);
 
