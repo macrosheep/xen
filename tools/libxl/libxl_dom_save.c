@@ -298,7 +298,6 @@ void libxl__domain_save(libxl__egc *egc, libxl__domain_save_state *dss)
     dss2->ao = ao;
 
     if (r_info != NULL) {
-        dss->interval = r_info->interval;
         dss->xcflags |= XCFLAGS_CHECKPOINTED;
         if (libxl_defbool_val(r_info->compression))
             dss->xcflags |= XCFLAGS_CHECKPOINT_COMPRESS;
@@ -492,7 +491,7 @@ static void domain_save_done(libxl__egc *egc,
          * from sending checkpoints. Teardown the network buffers and
          * release netlink resources.  This is an async op.
          */
-        libxl__remus_teardown(egc, dss, rc);
+        libxl__remus_teardown(egc, &dss->rs, rc);
         return;
     }
 
