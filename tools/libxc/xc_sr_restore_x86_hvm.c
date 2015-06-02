@@ -78,7 +78,8 @@ static int handle_hvm_params(struct xc_sr_context *ctx,
             break;
         case HVM_PARAM_IOREQ_PFN:
         case HVM_PARAM_BUFIOREQ_PFN:
-            xc_clear_domain_page(xch, ctx->domid, entry->value);
+            if ( !ctx->restore.buffer_all_records )
+                xc_clear_domain_page(xch, ctx->domid, entry->value);
             break;
         }
 
