@@ -20,9 +20,11 @@
 /*----- Remus setup and teardown -----*/
 
 static void libxl_remus_setup_done(libxl__egc *egc,
-                                   libxl__checkpoint_devices_state *cds, int rc);
+                                   libxl__checkpoint_devices_state *cds,
+                                   int rc);
 static void libxl_remus_setup_failed(libxl__egc *egc,
-                                     libxl__checkpoint_devices_state *cds, int rc);
+                                     libxl__checkpoint_devices_state *cds,
+                                     int rc);
 void libxl__remus_setup(libxl__egc *egc, libxl__domain_save_state *dss)
 {
     /* Convenience aliases */
@@ -71,7 +73,8 @@ static void libxl_remus_setup_done(libxl__egc *egc,
 }
 
 static void libxl_remus_setup_failed(libxl__egc *egc,
-                                     libxl__checkpoint_devices_state *cds, int rc)
+                                     libxl__checkpoint_devices_state *cds,
+                                     int rc)
 {
     libxl__domain_save_state *dss = CONTAINER_OF(cds, *dss, cds);
     STATE_AO_GC(dss->ao);
