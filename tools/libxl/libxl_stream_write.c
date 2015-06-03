@@ -60,7 +60,7 @@ static void stream_done(libxl__egc *egc,
                         libxl__stream_write_state *stream);
 
 static void check_stream_finished(libxl__egc *egc,
-                                  libxl__domain_suspend_state *dcs,
+                                  libxl__domain_save_state *dcs,
                                   int rc, const char *what);
 
 /* Event callbacks for plain VM. */
@@ -187,7 +187,7 @@ static void stream_failed(libxl__egc *egc,
 static void stream_done(libxl__egc *egc,
                         libxl__stream_write_state *stream)
 {
-    libxl__domain_suspend_state *dss = CONTAINER_OF(stream, *dss, sws);
+    libxl__domain_save_state *dss = CONTAINER_OF(stream, *dss, sws);
 
     assert(!stream->running);
     assert(!stream->in_checkpoint);
@@ -196,7 +196,7 @@ static void stream_done(libxl__egc *egc,
 }
 
 static void check_stream_finished(libxl__egc *egc,
-                                  libxl__domain_suspend_state *dss,
+                                  libxl__domain_save_state *dss,
                                   int rc, const char *what)
 {
     libxl__stream_write_state *stream = &dss->sws;
@@ -270,7 +270,7 @@ static void libxc_header_done(libxl__egc *egc,
                               int onwrite, int errnoval)
 {
     libxl__stream_write_state *stream = CONTAINER_OF(dc, *stream, dc);
-    libxl__domain_suspend_state *dss = CONTAINER_OF(stream, *dss, sws);
+    libxl__domain_save_state *dss = CONTAINER_OF(stream, *dss, sws);
     STATE_AO_GC(stream->ao);
     int ret = 0;
 
@@ -290,7 +290,7 @@ static void libxc_header_done(libxl__egc *egc,
 void libxl__xc_domain_save_done(libxl__egc *egc, void *dss_void,
                                 int rc, int retval, int errnoval)
 {
-    libxl__domain_suspend_state *dss = dss_void;
+    libxl__domain_save_state *dss = dss_void;
     libxl__stream_write_state *stream = &dss->sws;
     STATE_AO_GC(dss->ao);
 
@@ -299,10 +299,10 @@ void libxl__xc_domain_save_done(libxl__egc *egc, void *dss_void,
 
     if (retval) {
         LOGEV(ERROR, errnoval, "saving domain: %s",
-                         dss->guest_responded ?
+                         dss->dsps.guest_responded ?
                          "domain responded to suspend request" :
                          "domain did not respond to suspend request");
-        if ( !dss->guest_responded )
+        if ( !dss->dsps.guest_responded )
             rc = ERROR_GUEST_TIMEDOUT;
         else
             rc = ERROR_FAIL;
@@ -320,7 +320,7 @@ void libxl__xc_domain_save_done(libxl__egc *egc, void *dss_void,
 static void write_toolstack_record(libxl__egc *egc,
                                    libxl__stream_write_state *stream)
 {
-    libxl__domain_suspend_state *dss = CONTAINER_OF(stream, *dss, sws);
+    libxl__domain_save_state *dss = CONTAINER_OF(stream, *dss, sws);
     libxl__datacopier_state *dc = &stream->dc;
     STATE_AO_GC(stream->ao);
     struct libxl_sr_rec_hdr rec = { REC_TYPE_XENSTORE_DATA, 0 };
@@ -364,7 +364,7 @@ static void toolstack_record_done(libxl__egc *egc,
                                   int onwrite, int errnoval)
 {
     libxl__stream_write_state *stream = CONTAINER_OF(dc, *stream, dc);
-    libxl__domain_suspend_state *dss = CONTAINER_OF(stream, *dss, sws);
+    libxl__domain_save_state *dss = CONTAINER_OF(stream, *dss, sws);
     STATE_AO_GC(stream->ao);
     int ret = 0;
 
@@ -392,7 +392,7 @@ static void toolstack_record_done(libxl__egc *egc,
 static void write_emulator_record(libxl__egc *egc,
                                   libxl__stream_write_state *stream)
 {
-    libxl__domain_suspend_state *dss = CONTAINER_OF(stream, *dss, sws);
+    libxl__domain_save_state *dss = CONTAINER_OF(stream, *dss, sws);
     libxl__datacopier_state *dc = &stream->dc;
     STATE_AO_GC(stream->ao);
     struct libxl_sr_rec_hdr rec = { REC_TYPE_EMULATOR_CONTEXT, 0 };
@@ -404,7 +404,7 @@ static void write_emulator_record(libxl__egc *egc,
     assert(dss->type == LIBXL_DOMAIN_TYPE_HVM);
 
     /* Convenience aliases */
-    const char *const filename = dss->dm_savefile;
+    const char *const filename = dss->dsps.dm_savefile;
     const uint32_t domid = dss->domid;
 
     switch(libxl__device_model_version_running(gc, domid)) {
@@ -421,7 +421,7 @@ static void write_emulator_record(libxl__egc *egc,
         goto err;
     }
 
-    ret = libxl__domain_suspend_device_model(gc, dss);
+    ret = libxl__domain_suspend_device_model(gc, &dss->dsps);
     if (ret)
         goto err;
 
@@ -577,7 +577,7 @@ static void checkpoint_done(libxl__egc *egc,
                             libxl__stream_write_state *stream,
                             int rc)
 {
-    libxl__domain_suspend_state *dss = CONTAINER_OF(stream, *dss, sws);
+    libxl__domain_save_state *dss = CONTAINER_OF(stream, *dss, sws);
 
     assert(stream->in_checkpoint);
     stream->in_checkpoint = false;
