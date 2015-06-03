@@ -3140,8 +3140,8 @@ struct libxl__domain_create_state {
 /*----- Domain suspend (save) functions -----*/
 
 /* calls dss->callback when done */
-_hidden void libxl__domain_suspend(libxl__egc *egc,
-                                   libxl__domain_suspend_state *dss);
+_hidden void libxl__domain_save(libxl__egc *egc,
+                                libxl__domain_suspend_state *dss);
 
 
 /* calls libxl__xc_domain_suspend_done when done */
