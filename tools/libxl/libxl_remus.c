@@ -24,7 +24,7 @@ static void remus_setup_done(libxl__egc *egc,
 static void remus_setup_failed(libxl__egc *egc,
                                libxl__remus_devices_state *rds, int rc);
 
-void libxl__remus_setup(libxl__egc *egc, libxl__domain_suspend_state *dss)
+void libxl__remus_setup(libxl__egc *egc, libxl__domain_save_state *dss)
 {
     /* Convenience aliases */
     libxl__remus_devices_state *const rds = &dss->rds;
@@ -57,7 +57,7 @@ out:
 static void remus_setup_done(libxl__egc *egc,
                              libxl__remus_devices_state *rds, int rc)
 {
-    libxl__domain_suspend_state *dss = CONTAINER_OF(rds, *dss, rds);
+    libxl__domain_save_state *dss = CONTAINER_OF(rds, *dss, rds);
     STATE_AO_GC(dss->ao);
 
     if (!rc) {
@@ -74,7 +74,7 @@ static void remus_setup_done(libxl__egc *egc,
 static void remus_setup_failed(libxl__egc *egc,
                                libxl__remus_devices_state *rds, int rc)
 {
-    libxl__domain_suspend_state *dss = CONTAINER_OF(rds, *dss, rds);
+    libxl__domain_save_state *dss = CONTAINER_OF(rds, *dss, rds);
     STATE_AO_GC(dss->ao);
 
     if (rc)
@@ -88,7 +88,7 @@ static void remus_teardown_done(libxl__egc *egc,
                                 libxl__remus_devices_state *rds,
                                 int rc);
 void libxl__remus_teardown(libxl__egc *egc,
-                           libxl__domain_suspend_state *dss,
+                           libxl__domain_save_state *dss,
                            int rc)
 {
     EGC_GC;
@@ -103,7 +103,7 @@ static void remus_teardown_done(libxl__egc *egc,
                                 libxl__remus_devices_state *rds,
                                 int rc)
 {
-    libxl__domain_suspend_state *dss = CONTAINER_OF(rds, *dss, rds);
+    libxl__domain_save_state *dss = CONTAINER_OF(rds, *dss, rds);
     STATE_AO_GC(dss->ao);
 
     if (rc)
@@ -115,7 +115,7 @@ static void remus_teardown_done(libxl__egc *egc,
 
 /*----- remus callbacks -----*/
 static void remus_domain_suspend_callback_common_done(libxl__egc *egc,
-                                libxl__domain_suspend_state *dss, int ok);
+                                libxl__domain_suspend_state *dsps, int ok);
 static void remus_devices_postsuspend_cb(libxl__egc *egc,
                                          libxl__remus_devices_state *rds,
                                          int rc);
@@ -127,15 +127,18 @@ void libxl__remus_domain_suspend_callback(void *data)
 {
     libxl__save_helper_state *shs = data;
     libxl__egc *egc = shs->egc;
-    libxl__domain_suspend_state *dss = CONTAINER_OF(shs, *dss, shs);
+    libxl__domain_save_state *dss = CONTAINER_OF(shs, *dss, shs);
+    libxl__domain_suspend_state *dsps = &dss->dsps;
 
-    dss->callback_common_done = remus_domain_suspend_callback_common_done;
-    libxl__domain_suspend(egc, dss);
+    dsps->callback_common_done = remus_domain_suspend_callback_common_done;
+    libxl__domain_suspend(egc, dsps);
 }
 
 static void remus_domain_suspend_callback_common_done(libxl__egc *egc,
-                                libxl__domain_suspend_state *dss, int ok)
+                                libxl__domain_suspend_state *dsps, int ok)
 {
+    libxl__domain_save_state *dss = CONTAINER_OF(dsps, *dss, dsps);
+
     if (!ok)
         goto out;
 
@@ -153,7 +156,7 @@ static void remus_devices_postsuspend_cb(libxl__egc *egc,
                                          int rc)
 {
     int ok = 0;
-    libxl__domain_suspend_state *dss = CONTAINER_OF(rds, *dss, rds);
+    libxl__domain_save_state *dss = CONTAINER_OF(rds, *dss, rds);
 
     if (rc)
         goto out;
@@ -168,7 +171,7 @@ void libxl__remus_domain_resume_callback(void *data)
 {
     libxl__save_helper_state *shs = data;
     libxl__egc *egc = shs->egc;
-    libxl__domain_suspend_state *dss = CONTAINER_OF(shs, *dss, shs);
+    libxl__domain_save_state *dss = CONTAINER_OF(shs, *dss, shs);
     STATE_AO_GC(dss->ao);
 
     libxl__remus_devices_state *const rds = &dss->rds;
@@ -181,7 +184,7 @@ static void remus_devices_preresume_cb(libxl__egc *egc,
                                        int rc)
 {
     int ok = 0;
-    libxl__domain_suspend_state *dss = CONTAINER_OF(rds, *dss, rds);
+    libxl__domain_save_state *dss = CONTAINER_OF(rds, *dss, rds);
     STATE_AO_GC(dss->ao);
 
     if (rc)
@@ -201,7 +204,7 @@ out:
 /*----- remus asynchronous checkpoint callback -----*/
 
 static void remus_checkpoint_dm_saved(libxl__egc *egc,
-                                      libxl__domain_suspend_state *dss, int rc);
+                                      libxl__domain_save_state *dss, int rc);
 static void remus_devices_commit_cb(libxl__egc *egc,
                                     libxl__remus_devices_state *rds,
                                     int rc);
@@ -211,7 +214,7 @@ static void remus_next_checkpoint(libxl__egc *egc, libxl__ev_time *ev,
 void libxl__remus_domain_checkpoint_callback(void *data)
 {
     libxl__save_helper_state *shs = data;
-    libxl__domain_suspend_state *dss = CONTAINER_OF(shs, *dss, shs);
+    libxl__domain_save_state *dss = CONTAINER_OF(shs, *dss, shs);
     libxl__egc *egc = dss->shs.egc;
     STATE_AO_GC(dss->ao);
 
@@ -224,7 +227,7 @@ void libxl__remus_domain_checkpoint_callback(void *data)
 }
 
 static void remus_checkpoint_dm_saved(libxl__egc *egc,
-                                      libxl__domain_suspend_state *dss, int rc)
+                                      libxl__domain_save_state *dss, int rc)
 {
     /* Convenience aliases */
     libxl__remus_devices_state *const rds = &dss->rds;
@@ -249,7 +252,7 @@ static void remus_devices_commit_cb(libxl__egc *egc,
                                     libxl__remus_devices_state *rds,
                                     int rc)
 {
-    libxl__domain_suspend_state *dss = CONTAINER_OF(rds, *dss, rds);
+    libxl__domain_save_state *dss = CONTAINER_OF(rds, *dss, rds);
 
     STATE_AO_GC(dss->ao);
 
@@ -283,7 +286,7 @@ out:
 static void remus_next_checkpoint(libxl__egc *egc, libxl__ev_time *ev,
                                   const struct timeval *requested_abs)
 {
-    libxl__domain_suspend_state *dss =
+    libxl__domain_save_state *dss =
                             CONTAINER_OF(ev, *dss, checkpoint_timeout);
 
     STATE_AO_GC(dss->ao);
