@@ -132,8 +132,11 @@ struct xc_sr_restore_ops
      *
      * @return 0 for success, -1 for failure, or the sentinel value
      * RECORD_NOT_PROCESSED.
+     * BROKEN_CHANNEL: if we are under Remus/COLO, this means master may dead,
+     *                 we will failover.
      */
 #define RECORD_NOT_PROCESSED 1
+#define BROKEN_CHANNEL 2
     int (*process_record)(struct xc_sr_context *ctx, struct xc_sr_record *rec);
 
     /**
@@ -205,8 +208,12 @@ struct xc_sr_context
             uint32_t guest_type;
             uint32_t guest_page_size;
 
-            /* Plain VM, or checkpoints over time. */
-            bool checkpointed;
+            /*
+             * 0: Plain VM
+             * 1: Remus
+             * 2: COLO
+             */
+            int checkpointed;
 
             /* Currently buffering records between a checkpoint */
             bool buffer_all_records;

@@ -181,6 +181,7 @@ static int handle_qemu(struct xc_sr_context *ctx)
     if ( fp )
         fclose(fp);
     free(qbuf);
+    ctx->x86_hvm.restore.qbuf = NULL;
 
     return rc;
 }
