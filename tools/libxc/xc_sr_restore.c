@@ -454,6 +454,49 @@ static int handle_checkpoint(struct xc_sr_context *ctx)
     else
         ctx->restore.buffer_all_records = true;
 
+    if ( ctx->restore.checkpointed == MIG_STREAM_COLO )
+    {
+#define HANDLE_CALLBACK_RETURN_VALUE(ret)                   \
+    do {                                                    \
+        if ( ret == 1 )                                     \
+            rc = 0; /* Success */                           \
+        else                                                \
+        {                                                   \
+            if ( ret == 2 )                                 \
+                rc = BROKEN_CHANNEL;                        \
+            else                                            \
+                rc = -1; /* Some unspecified error */       \
+            goto err;                                       \
+        }                                                   \
+    } while (0)
+
+        /* COLO */
+
+        /* We need to resume guest */
+        rc = ctx->restore.ops.stream_complete(ctx);
+        if ( rc )
+            goto err;
+
+        /* TODO: call restore_results */
+
+        /* Resume secondary vm */
+        ret = ctx->restore.callbacks->postcopy(ctx->restore.callbacks->data);
+        HANDLE_CALLBACK_RETURN_VALUE(ret);
+
+        /* Wait for a new checkpoint */
+        ret = ctx->restore.callbacks->should_checkpoint(
+                                                ctx->restore.callbacks->data);
+        HANDLE_CALLBACK_RETURN_VALUE(ret);
+
+        /* suspend secondary vm */
+        ret = ctx->restore.callbacks->suspend(ctx->restore.callbacks->data);
+        HANDLE_CALLBACK_RETURN_VALUE(ret);
+
+#undef HANDLE_CALLBACK_RETURN_VALUE
+
+        /* TODO: send dirty bitmap to primary */
+    }
+
  err:
     return rc;
 }
@@ -625,6 +668,15 @@ static int restore(struct xc_sr_context *ctx)
     } while ( rec.type != REC_TYPE_END );
 
  remus_failover:
+
+    if ( ctx->restore.checkpointed == MIG_STREAM_COLO )
+    {
+        /* With COLO, we have already called stream_complete */
+        rc = 0;
+        IPRINTF("COLO Failover");
+        goto done;
+    }
+
     /*
      * With Remus, if we reach here, there must be some error on primary,
      * failover from the last checkpoint state.
@@ -678,6 +730,14 @@ int xc_domain_restore2(xc_interface *xch, int io_fd, uint32_t dom,
     /* Sanity checks for callbacks. */
     if ( checkpointed_stream )
         assert(callbacks->checkpoint);
+
+    if ( ctx.restore.checkpointed == MIG_STREAM_COLO )
+    {
+        /* this is COLO restore */
+        assert(callbacks->suspend &&
+               callbacks->postcopy &&
+               callbacks->should_checkpoint);
+    }
 
     IPRINTF("In experimental %s", __func__);
     DPRINTF("fd %d, dom %u, hvm %u, pae %u, superpages %d"
