@@ -515,6 +515,58 @@ static int send_memory_live(struct xc_sr_context *ctx)
     return rc;
 }
 
+static int merge_secondary_dirty_bitmap(struct xc_sr_context *ctx)
+{
+    xc_interface *xch = ctx->xch;
+    struct xc_sr_record rec;
+    uint64_t *pfns = NULL;
+    uint64_t pfn;
+    unsigned count, i;
+    int rc;
+    DECLARE_HYPERCALL_BUFFER_SHADOW(unsigned long, dirty_bitmap,
+                                    &ctx->save.dirty_bitmap_hbuf);
+
+    rc = read_record(ctx, ctx->save.recv_fd, &rec);
+    if ( rc )
+        goto err;
+
+    if ( rec.type != REC_TYPE_DIRTY_BITMAP )
+    {
+        PERROR("Expect dirty bitmap record, but received %u", rec.type );
+        rc = -1;
+        goto err;
+    }
+
+    if ( rec.length % sizeof(*pfns) )
+    {
+        PERROR("Invalid dirty bitmap record length %u", rec.length );
+        rc = -1;
+        goto err;
+    }
+
+    count = rec.length / sizeof(*pfns);
+    pfns = rec.data;
+
+    for ( i = 0; i < count; i++ )
+    {
+        pfn = pfns[i];
+        if (pfn > ctx->save.p2m_size)
+        {
+            PERROR("Invalid pfn %#lx", pfn );
+            rc = -1;
+            goto err;
+        }
+
+        set_bit(pfn, dirty_bitmap);
+    }
+
+    rc = 0;
+
+ err:
+    free(rec.data);
+    return rc;
+}
+
 /*
  * Suspend the domain and send dirty memory.
  * This is the last iteration of the live migration and the
@@ -554,6 +606,16 @@ static int suspend_and_send_dirty(struct xc_sr_context *ctx)
         xc_set_progress_prefix(xch, "Checkpointed save");
 
     bitmap_or(dirty_bitmap, ctx->save.deferred_pages, ctx->save.p2m_size);
+
+    if ( !ctx->save.live && ctx->save.checkpointed == MIG_STREAM_COLO )
+    {
+        rc = merge_secondary_dirty_bitmap(ctx);
+        if ( rc )
+        {
+            PERROR("Failed to get secondary vm's dirty pages");
+            goto out;
+        }
+    }
 
     rc = send_dirty_pages(ctx, stats.dirty_count + ctx->save.nr_deferred_pages);
     if ( rc )
@@ -784,11 +846,42 @@ static int save(struct xc_sr_context *ctx, uint16_t guest_type)
             if ( rc )
                 goto err;
 
-            ctx->save.callbacks->postcopy(ctx->save.callbacks->data);
+            if ( ctx->save.checkpointed == MIG_STREAM_COLO )
+            {
+                rc = ctx->save.callbacks->checkpoint(ctx->save.callbacks->data);
+                if ( !rc )
+                {
+                    rc = -1;
+                    goto err;
+                }
+            }
 
-            rc = ctx->save.callbacks->checkpoint(ctx->save.callbacks->data);
-            if ( rc <= 0 )
-                ctx->save.checkpointed = false;
+            rc = ctx->save.callbacks->postcopy(ctx->save.callbacks->data);
+            if ( !rc )
+            {
+                rc = -1;
+                goto err;
+            }
+
+            if ( ctx->save.checkpointed == MIG_STREAM_COLO )
+            {
+                rc = ctx->save.callbacks->should_checkpoint(
+                                                    ctx->save.callbacks->data);
+                if ( rc <= 0 )
+                    ctx->save.checkpointed = false;
+            }
+            else if ( ctx->save.checkpointed == MIG_STREAM_REMUS )
+            {
+                rc = ctx->save.callbacks->checkpoint(ctx->save.callbacks->data);
+                if ( rc <= 0 )
+                    ctx->save.checkpointed = false;
+            }
+            else
+            {
+                ERROR("Unknown checkpointed stream");
+                rc = -1;
+                goto err;
+            }
         }
     } while ( ctx->save.checkpointed );
 
@@ -835,6 +928,7 @@ int xc_domain_save2(xc_interface *xch, int io_fd, uint32_t dom,
     ctx.save.live  = !!(flags & XCFLAGS_LIVE);
     ctx.save.debug = !!(flags & XCFLAGS_DEBUG);
     ctx.save.checkpointed = checkpointed_stream;
+    ctx.save.recv_fd = back_fd;
 
     /*
      * TODO: Find some time to better tweak the live migration algorithm.
@@ -850,6 +944,8 @@ int xc_domain_save2(xc_interface *xch, int io_fd, uint32_t dom,
         assert(callbacks->switch_qemu_logdirty);
     if ( ctx.save.checkpointed )
         assert(callbacks->checkpoint && callbacks->postcopy);
+    if ( ctx.save.checkpointed == MIG_STREAM_COLO )
+        assert(callbacks->should_checkpoint);
 
     IPRINTF("In experimental %s", __func__);
     DPRINTF("fd %d, dom %u, max_iters %u, max_factor %u, flags %u, hvm %d",
