@@ -515,6 +515,31 @@ static int send_memory_live(struct xc_sr_context *ctx)
     return rc;
 }
 
+static int update_dirty_bitmap(uint8_t *(*get_dirty_pfn)(void *), void *data,
+                               unsigned long p2m_size, unsigned long *bitmap)
+{
+    uint64_t *pfn_list;
+    uint64_t count, i;
+    uint64_t pfn;
+
+    pfn_list = (uint64_t *)get_dirty_pfn(data);
+    assert(pfn_list);
+
+    count = pfn_list[0];
+    for (i = 0; i < count; i++) {
+        pfn = pfn_list[i + 1];
+        if (pfn > p2m_size) {
+            errno = EINVAL;
+            return -1;
+        }
+
+        set_bit(pfn, bitmap);
+    }
+
+    free(pfn_list);
+    return 0;
+}
+
 /*
  * Suspend the domain and send dirty memory.
  * This is the last iteration of the live migration and the
@@ -554,6 +579,19 @@ static int suspend_and_send_dirty(struct xc_sr_context *ctx)
         xc_set_progress_prefix(xch, "Checkpointed save");
 
     bitmap_or(dirty_bitmap, ctx->save.deferred_pages, ctx->save.p2m_size);
+
+    if ( !ctx->save.live && ctx->save.callbacks->get_dirty_pfn )
+    {
+        rc = update_dirty_bitmap(ctx->save.callbacks->get_dirty_pfn,
+                                 ctx->save.callbacks->data,
+                                 ctx->save.p2m_size,
+                                 dirty_bitmap);
+        if ( rc )
+        {
+            PERROR("Failed to get secondary vm's dirty pages");
+            goto out;
+        }
+    }
 
     rc = send_dirty_pages(ctx, stats.dirty_count + ctx->save.nr_deferred_pages);
     if ( rc )
@@ -784,7 +822,16 @@ static int save(struct xc_sr_context *ctx, uint16_t guest_type)
             if ( rc )
                 goto err;
 
-            ctx->save.callbacks->postcopy(ctx->save.callbacks->data);
+            rc = ctx->save.callbacks->postcopy(ctx->save.callbacks->data);
+            if ( !rc ) {
+                if ( !errno )
+                {
+                    /* Postcopy request failed (without errno, using EINVAL) */
+                    errno = EINVAL;
+                }
+                rc = -1;
+                goto err;
+            }
 
             rc = ctx->save.callbacks->checkpoint(ctx->save.callbacks->data);
             if ( rc <= 0 )
