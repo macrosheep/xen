@@ -569,19 +569,6 @@ static int process_record(struct xc_sr_context *ctx, struct xc_sr_record *rec)
     free(rec->data);
     rec->data = NULL;
 
-    if ( rc == RECORD_NOT_PROCESSED )
-    {
-        if ( rec->type & REC_TYPE_OPTIONAL )
-            DPRINTF("Ignoring optional record %#x (%s)",
-                    rec->type, rec_type_to_str(rec->type));
-        else
-        {
-            ERROR("Mandatory record %#x (%s) not handled",
-                  rec->type, rec_type_to_str(rec->type));
-            rc = -1;
-        }
-    }
-
     return rc;
 }
 
@@ -669,7 +656,20 @@ static int restore(struct xc_sr_context *ctx)
         else
         {
             rc = process_record(ctx, &rec);
-            if ( rc )
+            if ( rc == RECORD_NOT_PROCESSED )
+            {
+                if ( rec.type & REC_TYPE_OPTIONAL )
+                    DPRINTF("Ignoring optional record %#x (%s)",
+                            rec.type, rec_type_to_str(rec.type));
+                else
+                {
+                    ERROR("Mandatory record %#x (%s) not handled",
+                          rec.type, rec_type_to_str(rec.type));
+                    rc = -1;
+                    goto err;
+                }
+            }
+            else if ( rc )
                 goto err;
         }
 
