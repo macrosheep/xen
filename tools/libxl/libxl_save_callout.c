@@ -256,6 +256,22 @@ static void helper_failed(libxl__egc *egc, libxl__save_helper_state *shs,
     libxl__kill(gc, shs->child.pid, SIGKILL, "save/restore helper");
 }
 
+void libxl__save_helper_abort(libxl__egc *egc,
+                              libxl__save_helper_state *shs)
+{
+    STATE_AO_GC(shs->ao);
+
+    if (!libxl__ev_child_inuse(&shs->child)) {
+        helper_failed(egc, shs, ERROR_FAIL);
+        return;
+    }
+
+    if (!shs->rc)
+        shs->rc = ERROR_FAIL;
+
+    libxl__kill(gc, shs->child.pid, SIGTERM, "save/restore helper");
+}
+
 static void helper_stdout_readable(libxl__egc *egc, libxl__ev_fd *ev,
                                    int fd, short events, short revents)
 {
