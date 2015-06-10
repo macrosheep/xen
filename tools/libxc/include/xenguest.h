@@ -35,6 +35,9 @@
 #define X86_64_B_SIZE   64 
 #define X86_32_B_SIZE   32
 
+#define XC_CHECKPOINTED_STREAM_NONE     0
+#define XC_CHECKPOINTED_STREAM_Remus    1
+
 /* callbacks provided by xc_domain_save */
 struct save_callbacks {
     /* Called after expiration of checkpoint interval,

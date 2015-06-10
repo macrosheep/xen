@@ -763,6 +763,13 @@ typedef struct libxl__ctx libxl_ctx;
  */
 #define LIBXL_HAVE_REMUS 1
 
+/*
+ * LIBXL_HAVE_CHECKPOINTED_STREAM_ENUM
+ * If this is defined, then checkpointed_stream is now an enum define
+ * in libxl_types.idl, before it is an int value.
+ */
+#define LIBXL_HAVE_CHECKPOINTED_STREAM_ENUM 1
+
 typedef uint8_t libxl_mac[6];
 #define LIBXL_MAC_FMT "%02hhx:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx"
 #define LIBXL_MAC_FMTLEN ((2*6)+5) /* 6 hex bytes plus 5 colons */

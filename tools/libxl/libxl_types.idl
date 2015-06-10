@@ -207,6 +207,12 @@ libxl_hdtype = Enumeration("hdtype", [
     (2, "AHCI"),
     ], init_val = "LIBXL_HDTYPE_IDE")
 
+# Consistent with values defined in xenguest.h: XC_CHECKPOINTED_STREAM_XXX
+libxl_checkpointed_stream = Enumeration("checkpointed_stream", [
+    (0, "NONE"),
+    (1, "REMUS"),
+    ])
+
 #
 # Complex libxl types
 #
@@ -354,7 +360,7 @@ libxl_domain_create_info = Struct("domain_create_info",[
     ], dir=DIR_IN)
 
 libxl_domain_restore_params = Struct("domain_restore_params", [
-    ("checkpointed_stream", integer),
+    ("checkpointed_stream", libxl_checkpointed_stream),
     ("stream_version", uint32, {'init_val': '1'}),
     ])
 
