@@ -802,7 +802,8 @@ static int save_tsc_info(xc_interface *xch, uint32_t dom, int io_fd)
 
 int xc_domain_save(xc_interface *xch, int io_fd, uint32_t dom, uint32_t max_iters,
                    uint32_t max_factor, uint32_t flags,
-                   struct save_callbacks* callbacks, int hvm)
+                   struct save_callbacks* callbacks, int hvm,
+                   int checkpointed_stream)
 {
     xc_dominfo_t info;
     DECLARE_DOMCTL;
@@ -897,7 +898,8 @@ int xc_domain_save(xc_interface *xch, int io_fd, uint32_t dom, uint32_t max_iter
     if ( getenv("XG_MIGRATION_V2") )
     {
         return xc_domain_save2(xch, io_fd, dom, max_iters,
-                               max_factor, flags, callbacks, hvm);
+                               max_factor, flags, callbacks, hvm,
+                               checkpointed_stream);
     }
 
     DPRINTF("%s: starting save of domid %u", __func__, dom);

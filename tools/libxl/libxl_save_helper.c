@@ -248,6 +248,7 @@ int main(int argc, char **argv)
         uint32_t flags =           strtoul(NEXTARG,0,10);
         int hvm =                  atoi(NEXTARG);
         unsigned cbflags =         strtoul(NEXTARG,0,10);
+        int checkpointed_stream =  strtoul(NEXTARG,0,10);
         assert(!*++argv);
 
         helper_setcallbacks_save(&helper_save_callbacks, cbflags);
@@ -256,7 +257,7 @@ int main(int argc, char **argv)
         setup_signals(save_signal_handler);
 
         r = xc_domain_save2(xch, io_fd, dom, max_iters, max_factor, flags,
-                           &helper_save_callbacks, hvm);
+                           &helper_save_callbacks, hvm, checkpointed_stream);
         complete(r);
 
     } else if (!strcmp(mode,"--restore-domain")) {
