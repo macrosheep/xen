@@ -4249,7 +4249,7 @@ static void migrate_domain(uint32_t domid, const char *rune, int debug,
 }
 
 static void migrate_receive(int debug, int daemonize, int monitor,
-                            int send_fd, int recv_fd, int remus)
+                            int send_fd, int recv_fd, int checkpointed)
 {
     uint32_t domid;
     int rc, rc2;
@@ -4274,7 +4274,7 @@ static void migrate_receive(int debug, int daemonize, int monitor,
     dom_info.paused = 1;
     dom_info.migrate_fd = recv_fd;
     dom_info.migration_domname_r = &migration_domname;
-    dom_info.checkpointed_stream = remus;
+    dom_info.checkpointed_stream = checkpointed;
 
     rc = create_domain(&dom_info);
     if (rc < 0) {
@@ -4285,7 +4285,7 @@ static void migrate_receive(int debug, int daemonize, int monitor,
 
     domid = rc;
 
-    if (remus) {
+    if (checkpointed) {
         /* If we are here, it means that the sender (primary) has crashed.
          * TODO: Split-Brain Check.
          */
@@ -4456,7 +4456,8 @@ int main_restore(int argc, char **argv)
 
 int main_migrate_receive(int argc, char **argv)
 {
-    int debug = 0, daemonize = 1, monitor = 1, remus = 0;
+    int debug = 0, daemonize = 1, monitor = 1;
+    int checkpointed = LIBXL_CHECKPOINTED_STREAM_NONE;
     int opt;
 
     SWITCH_FOREACH_OPT(opt, "Fedr", NULL, "migrate-receive", 0) {
@@ -4471,7 +4472,7 @@ int main_migrate_receive(int argc, char **argv)
         debug = 1;
         break;
     case 'r':
-        remus = 1;
+        checkpointed = LIBXL_CHECKPOINTED_STREAM_REMUS;
         break;
     }
 
@@ -4481,7 +4482,7 @@ int main_migrate_receive(int argc, char **argv)
     }
     migrate_receive(debug, daemonize, monitor,
                     STDOUT_FILENO, STDIN_FILENO,
-                    remus);
+                    checkpointed);
 
     return 0;
 }

@@ -198,6 +198,11 @@ libxl_viridian_enlightenment = Enumeration("viridian_enlightenment", [
     (3, "reference_tsc"),
     ])
 
+libxl_checkpointed_stream = Enumeration("checkpointed_stream", [
+    (0, "NONE"),
+    (1, "REMUS"),
+    ])
+
 #
 # Complex libxl types
 #
