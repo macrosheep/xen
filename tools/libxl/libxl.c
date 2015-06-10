@@ -847,6 +847,7 @@ int libxl_domain_remus_start(libxl_ctx *ctx, libxl_domain_remus_info *info,
     dss->live = 1;
     dss->debug = 0;
     dss->remus = info;
+    dss->checkpointed_stream = LIBXL_CHECKPOINTED_STREAM_REMUS;
 
     assert(info);
 
@@ -901,6 +902,7 @@ int libxl_domain_suspend(libxl_ctx *ctx, uint32_t domid, int fd, int flags,
     dss->type = type;
     dss->live = flags & LIBXL_SUSPEND_LIVE;
     dss->debug = flags & LIBXL_SUSPEND_DEBUG;
+    dss->checkpointed_stream = LIBXL_CHECKPOINTED_STREAM_NONE;
 
     libxl__domain_save(egc, dss);
     return AO_INPROGRESS;

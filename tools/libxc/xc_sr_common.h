@@ -178,7 +178,7 @@ struct xc_sr_context
             bool live;
 
             /* Plain VM, or checkpoints over time. */
-            bool checkpointed;
+            int checkpointed;
 
             /* Further debugging information in the stream. */
             bool debug;
