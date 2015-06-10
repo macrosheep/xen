@@ -389,6 +389,12 @@ void libxl__domain_save(libxl__egc *egc, libxl__domain_save_state *dss)
         &dss->sws.shs.callbacks.save.a;
     libxl__domain_suspend_state *dsps = &dss->dsps;
 
+    if (dss->checkpointed_stream && !r_info) {
+        LOG(ERROR, "Migration stream is checkpointed, but there's no "
+                   "checkpoint info!");
+        goto out;
+    }
+
     dss->rc = 0;
     logdirty_init(&dss->logdirty);
     dsps->ao = ao;
@@ -412,15 +418,14 @@ void libxl__domain_save(libxl__egc *egc, libxl__domain_save_state *dss)
           | (debug ? XCFLAGS_DEBUG : 0)
           | (dss->hvm ? XCFLAGS_HVM : 0);
 
-    if (r_info != NULL) {
+    if (dss->checkpointed_stream == LIBXL_CHECKPOINTED_STREAM_REMUS) {
         dss->interval = r_info->interval;
-        dss->xcflags |= XCFLAGS_CHECKPOINTED;
         if (libxl_defbool_val(r_info->compression))
             dss->xcflags |= XCFLAGS_CHECKPOINT_COMPRESS;
     }
 
     memset(callbacks, 0, sizeof(*callbacks));
-    if (r_info != NULL) {
+    if (dss->checkpointed_stream == LIBXL_CHECKPOINTED_STREAM_REMUS) {
         callbacks->suspend = libxl__remus_domain_suspend_callback;
         callbacks->postcopy = libxl__remus_domain_resume_callback;
         callbacks->checkpoint = libxl__remus_domain_save_checkpoint_callback;
