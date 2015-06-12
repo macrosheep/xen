@@ -3175,6 +3175,7 @@ _hidden int libxl__toolstack_save(uint32_t domid, uint8_t **buf,
 /* calls libxl__xc_domain_restore_done when done */
 _hidden void libxl__xc_domain_restore(libxl__egc *egc,
                                       libxl__domain_create_state *dcs,
+                                      int restore_fd,
                                       int hvm, int pae, int superpages);
 /* If rc==0 then retval is the return value from xc_domain_save
  * and errnoval is the errno value it provided.

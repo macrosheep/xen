@@ -1057,7 +1057,7 @@ static void domcreate_bootloader_done(libxl__egc *egc,
         rc = ERROR_INVAL;
         goto out;
     }
-    libxl__xc_domain_restore(egc, dcs,
+    libxl__xc_domain_restore(egc, dcs, restore_fd,
                              hvm, pae, superpages);
     return;
 

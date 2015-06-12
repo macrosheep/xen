@@ -41,13 +41,13 @@ static void helper_done(libxl__egc *egc, libxl__save_helper_state *shs);
 /*----- entrypoints -----*/
 
 void libxl__xc_domain_restore(libxl__egc *egc, libxl__domain_create_state *dcs,
+                              int restore_fd,
                               int hvm, int pae, int superpages)
 {
     STATE_AO_GC(dcs->ao);
 
     /* Convenience aliases */
     const uint32_t domid = dcs->guest_domid;
-    const int restore_fd = dcs->restore_fd;
     libxl__domain_build_state *const state = &dcs->build_state;
 
     unsigned cbflags = libxl__srm_callout_enumcallbacks_restore
