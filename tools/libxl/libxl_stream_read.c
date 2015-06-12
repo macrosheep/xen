@@ -225,6 +225,11 @@ static void check_stream_finished(libxl__egc *egc,
             libxl__convert_legacy_stream_abort(egc, &dcs->chs, rc);
         }
 
+        if (libxl__save_helper_inuse(&dcs->shs)) {
+            skip = true;
+            libxl__save_helper_abort(egc, &dcs->shs);
+        }
+
         /* There is at least one more active task to join - wait for its
            callback */
         if ( skip )
@@ -235,6 +240,8 @@ static void check_stream_finished(libxl__egc *egc,
         LOG(DEBUG, "stream still in use");
     else if (libxl__convert_legacy_stream_inuse(&dcs->chs))
         LOG(DEBUG, "conversion still in use");
+    else if (libxl__save_helper_inuse(&dcs->shs))
+        LOG(DEBUG, "save/restore still in use");
     else {
         LOG(INFO, "Join complete: result %d", stream->joined_rc);
         stream->completion_callback(egc, dcs, stream->joined_rc);
@@ -377,6 +384,28 @@ static void record_body_done(libxl__egc *egc,
     stream_failed(egc, stream, ret);
 }
 
+void libxl__xc_domain_restore_done(libxl__egc *egc, void *dcs_void,
+                                   int ret, int retval, int errnoval)
+{
+    libxl__domain_create_state *dcs = dcs_void;
+    STATE_AO_GC(dcs->ao);
+
+    if (ret)
+        goto err;
+
+    if (retval) {
+        LOGEV(ERROR, errnoval, "restoring domain");
+        ret = ERROR_FAIL;
+        goto err;
+    }
+
+    libxl__stream_read_continue(egc, &dcs->srs);
+    return;
+
+ err:
+    check_stream_finished(egc, dcs, ret, "save/restore helper");
+}
+
 static void conversion_done(libxl__egc *egc,
                             libxl__conversion_helper_state *chs, int rc)
 {
@@ -400,6 +429,10 @@ static void process_record(libxl__egc *egc,
 
     case REC_TYPE_END:
         /* Handled later, after cleanup. */
+        break;
+
+    case REC_TYPE_LIBXC_CONTEXT:
+        libxl__xc_domain_restore(egc, dcs, stream->fd, 0, 0, 0);
         break;
 
     case REC_TYPE_XENSTORE_DATA:
