@@ -19,6 +19,8 @@
 
 #include "libxl_osdeps.h" /* must come before any other headers */
 
+#include "libxl_sr_stream_format.h"
+
 #include <assert.h>
 #include <dirent.h>
 #include <errno.h>
@@ -3121,6 +3123,42 @@ typedef void libxl__domain_create_cb(libxl__egc *egc,
                                      libxl__domain_create_state*,
                                      int rc, uint32_t domid);
 
+/* State for manipulating a libxl migration v2 stream */
+typedef struct libxl__stream_read_state libxl__stream_read_state;
+
+struct libxl__stream_read_state {
+    /* filled by the user */
+    libxl__ao *ao;
+    int fd;
+    void (*completion_callback)(libxl__egc *egc,
+                                libxl__domain_create_state *dcs,
+                                int rc);
+    /* Private */
+    int rc;
+    bool running;
+    libxl__datacopier_state dc;
+    size_t expected_len;
+    libxl_sr_hdr hdr;
+    libxl_sr_rec_hdr rec_hdr;
+    void *rec_body;
+};
+
+_hidden void libxl__stream_read_start(libxl__egc *egc,
+                                      libxl__stream_read_state *stream);
+
+_hidden void libxl__stream_read_continue(libxl__egc *egc,
+                                         libxl__stream_read_state *stream);
+
+_hidden void libxl__stream_read_abort(libxl__egc *egc,
+                                      libxl__stream_read_state *stream, int rc);
+
+static inline bool libxl__stream_read_inuse(
+    const libxl__stream_read_state *stream)
+{
+    return stream->running;
+}
+
+
 struct libxl__domain_create_state {
     /* filled in by user */
     libxl__ao *ao;
@@ -3137,6 +3175,7 @@ struct libxl__domain_create_state {
     libxl__stub_dm_spawn_state dmss;
         /* If we're not doing stubdom, we use only dmss.dm,
          * for the non-stubdom device model. */
+    libxl__stream_read_state srs;
     libxl__save_helper_state shs;
     /* necessary if the domain creation failed and we have to destroy it */
     libxl__domain_destroy_state dds;
