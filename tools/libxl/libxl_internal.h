@@ -880,7 +880,7 @@ _hidden pid_t libxl__ev_child_fork(libxl__gc *gc, libxl__ev_child *childw_out,
 static inline void libxl__ev_child_init(libxl__ev_child *childw_out)
                 { childw_out->pid = -1; }
 static inline int libxl__ev_child_inuse(const libxl__ev_child *childw_out)
-                { return childw_out->pid >= 0; }
+                { return childw_out->pid > 0; }
 
 /* Useable (only) in the child to once more make the ctx useable for
  * xenstore operations.  logs failure in the form "what: <error
