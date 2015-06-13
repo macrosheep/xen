@@ -38,6 +38,10 @@
  * process_record() will choose the correct next action based upon the
  * record.  Upon completion of the action, the next record header will be read
  * from the stream.
+ *
+ * Depending on the contents of the stream, there are likely to be several
+ * parallel tasks being managed.  check_stream_finished() is used to join all
+ * tasks in both success and error cases.
  */
 
 static void stream_success(libxl__egc *egc,
@@ -46,6 +50,12 @@ static void stream_failed(libxl__egc *egc,
                           libxl__stream_read_state *stream, int rc);
 static void stream_done(libxl__egc *egc,
                         libxl__stream_read_state *stream);
+
+static void conversion_done(libxl__egc *egc,
+                            libxl__conversion_helper_state *chs, int rc);
+static void check_stream_finished(libxl__egc *egc,
+                                  libxl__domain_create_state *dcs,
+                                  int rc, const char *what);
 
 /* Event callbacks for main reading loop. */
 static void stream_header_done(libxl__egc *egc,
@@ -73,11 +83,32 @@ static void emulator_padding_done(libxl__egc *egc,
 void libxl__stream_read_start(libxl__egc *egc,
                               libxl__stream_read_state *stream)
 {
+    libxl__domain_create_state *dcs = CONTAINER_OF(stream, *dcs, srs);
     libxl__datacopier_state *dc = &stream->dc;
+    STATE_AO_GC(stream->ao);
     int ret = 0;
 
     /* State initialisation. */
     assert(!stream->running);
+
+    if (stream->legacy) {
+        /* Convert a legacy stream, if needed. */
+        dcs->chs.ao = stream->ao;
+        dcs->chs.legacy_fd = stream->fd;
+        dcs->chs.legacy_width = dcs->restore_params.legacy_width;
+        dcs->chs.hvm =
+            (dcs->guest_config->b_info.type == LIBXL_DOMAIN_TYPE_HVM);
+        dcs->chs.v2_carefd = NULL;
+        dcs->chs.completion_callback = conversion_done;
+
+        libxl__convert_legacy_stream(egc, &dcs->chs);
+
+        assert(dcs->chs.v2_carefd);
+        stream->v2_carefd = dcs->chs.v2_carefd;
+        stream->fd = libxl__carefd_fd(dcs->chs.v2_carefd);
+    }
+
+    /* stream->fd is now guarenteed to be a v2 stream. */
 
     memset(dc, 0, sizeof(*dc));
     dc->ao = stream->ao;
@@ -164,7 +195,50 @@ static void stream_done(libxl__egc *egc,
 
     assert(!stream->running);
 
-    stream->completion_callback(egc, dcs, stream->rc);
+    if (stream->v2_carefd)
+        libxl__carefd_close(stream->v2_carefd);
+
+    check_stream_finished(egc, dcs, stream->rc, "stream");
+}
+
+static void check_stream_finished(libxl__egc *egc,
+                                  libxl__domain_create_state *dcs,
+                                  int rc, const char *what)
+{
+    libxl__stream_read_state *stream = &dcs->srs;
+    STATE_AO_GC(dcs->ao);
+
+    LOG(INFO, "Task '%s' joining (rc %d)", what, rc);
+
+    if (rc && !stream->joined_rc) {
+        bool skip = false;
+        /* First reported failure from joining tasks.  Tear everything down */
+        stream->joined_rc = rc;
+
+        if (libxl__stream_read_inuse(&dcs->srs)) {
+            skip = true;
+            libxl__stream_read_abort(egc, &dcs->srs, rc);
+        }
+
+        if (libxl__convert_legacy_stream_inuse(&dcs->chs)) {
+            skip = true;
+            libxl__convert_legacy_stream_abort(egc, &dcs->chs, rc);
+        }
+
+        /* There is at least one more active task to join - wait for its
+           callback */
+        if ( skip )
+            return;
+    }
+
+    if (libxl__stream_read_inuse(&dcs->srs))
+        LOG(DEBUG, "stream still in use");
+    else if (libxl__convert_legacy_stream_inuse(&dcs->chs))
+        LOG(DEBUG, "conversion still in use");
+    else {
+        LOG(INFO, "Join complete: result %d", stream->joined_rc);
+        stream->completion_callback(egc, dcs, stream->joined_rc);
+    }
 }
 
 static void stream_header_done(libxl__egc *egc,
@@ -301,6 +375,15 @@ static void record_body_done(libxl__egc *egc,
  err:
     assert(ret);
     stream_failed(egc, stream, ret);
+}
+
+static void conversion_done(libxl__egc *egc,
+                            libxl__conversion_helper_state *chs, int rc)
+{
+    STATE_AO_GC(chs->ao);
+    libxl__domain_create_state *dcs = CONTAINER_OF(chs, *dcs, chs);
+
+    check_stream_finished(egc, dcs, rc, "conversion");
 }
 
 static void process_record(libxl__egc *egc,

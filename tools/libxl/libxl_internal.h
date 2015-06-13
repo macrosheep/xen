@@ -3161,11 +3161,14 @@ struct libxl__stream_read_state {
     /* filled by the user */
     libxl__ao *ao;
     int fd;
+    bool legacy;
     void (*completion_callback)(libxl__egc *egc,
                                 libxl__domain_create_state *dcs,
                                 int rc);
     /* Private */
+    libxl__carefd *v2_carefd;
     int rc;
+    int joined_rc;
     bool running;
     libxl__datacopier_state dc;
     size_t expected_len;
