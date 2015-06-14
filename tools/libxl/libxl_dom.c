@@ -1107,6 +1107,8 @@ int libxl__toolstack_restore(uint32_t domid, const uint8_t *buf,
 
 /*==================== Domain suspend (save) ====================*/
 
+static void stream_done(libxl__egc *egc,
+                        libxl__domain_suspend_state *dss, int rc);
 static void domain_suspend_done(libxl__egc *egc,
                         libxl__domain_suspend_state *dss, int rc);
 static void domain_suspend_callback_common_done(libxl__egc *egc,
@@ -2040,48 +2042,20 @@ void libxl__domain_suspend(libxl__egc *egc, libxl__domain_suspend_state *dss)
     callbacks->switch_qemu_logdirty = libxl__domain_suspend_common_switch_qemu_logdirty;
     dss->shs.callbacks.save.toolstack_save = libxl__toolstack_save;
 
-    libxl__xc_domain_save(egc, dss);
+    dss->sws.fd = dss->fd;
+    dss->sws.ao = dss->ao;
+    dss->sws.completion_callback = stream_done;
+
+    libxl__stream_write_start(egc, &dss->sws);
     return;
 
  out:
     domain_suspend_done(egc, dss, rc);
 }
 
-void libxl__xc_domain_save_done(libxl__egc *egc, void *dss_void,
-                                int rc, int retval, int errnoval)
+static void stream_done(libxl__egc *egc,
+                        libxl__domain_suspend_state *dss, int rc)
 {
-    libxl__domain_suspend_state *dss = dss_void;
-    STATE_AO_GC(dss->ao);
-
-    /* Convenience aliases */
-    const libxl_domain_type type = dss->type;
-
-    if (rc)
-        goto out;
-
-    if (retval) {
-        LOGEV(ERROR, errnoval, "saving domain: %s",
-                         dss->guest_responded ?
-                         "domain responded to suspend request" :
-                         "domain did not respond to suspend request");
-        if ( !dss->guest_responded )
-            rc = ERROR_GUEST_TIMEDOUT;
-        else
-            rc = ERROR_FAIL;
-        goto out;
-    }
-
-    if (type == LIBXL_DOMAIN_TYPE_HVM) {
-        rc = libxl__domain_suspend_device_model(gc, dss);
-        if (rc) goto out;
-
-        libxl__domain_save_device_model(egc, dss, domain_suspend_done);
-        return;
-    }
-
-    rc = 0;
-
-out:
     domain_suspend_done(egc, dss, rc);
 }
 

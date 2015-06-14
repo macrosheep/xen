@@ -247,8 +247,7 @@ static void libxc_header_done(libxl__egc *egc,
     stream_failed(egc, stream, ret);
 }
 
-static void __attribute__((used))
-will_be_libxl__xc_domain_save_done(libxl__egc *egc, void *dss_void,
+void libxl__xc_domain_save_done(libxl__egc *egc, void *dss_void,
                                 int rc, int retval, int errnoval)
 {
     libxl__domain_suspend_state *dss = dss_void;
