@@ -1867,8 +1867,8 @@ out:
 
 /*----- remus asynchronous checkpoint callback -----*/
 
-static void remus_checkpoint_dm_saved(libxl__egc *egc,
-                                      libxl__domain_suspend_state *dss, int rc);
+static void remus_checkpoint_stream_written(
+    libxl__egc *egc, libxl__domain_suspend_state *dss, int rc);
 static void remus_devices_commit_cb(libxl__egc *egc,
                                     libxl__remus_devices_state *rds,
                                     int rc);
@@ -1882,16 +1882,11 @@ static void libxl__remus_domain_checkpoint_callback(void *data)
     libxl__egc *egc = dss->shs.egc;
     STATE_AO_GC(dss->ao);
 
-    /* This would go into tailbuf. */
-    if (dss->hvm) {
-        libxl__domain_save_device_model(egc, dss, remus_checkpoint_dm_saved);
-    } else {
-        remus_checkpoint_dm_saved(egc, dss, 0);
-    }
+    libxl__stream_write_start_checkpoint(egc, &dss->sws);
 }
 
-static void remus_checkpoint_dm_saved(libxl__egc *egc,
-                                      libxl__domain_suspend_state *dss, int rc)
+static void remus_checkpoint_stream_written(
+    libxl__egc *egc, libxl__domain_suspend_state *dss, int rc)
 {
     /* Convenience aliases */
     libxl__remus_devices_state *const rds = &dss->rds;
@@ -2036,6 +2031,7 @@ void libxl__domain_suspend(libxl__egc *egc, libxl__domain_suspend_state *dss)
         callbacks->suspend = libxl__remus_domain_suspend_callback;
         callbacks->postcopy = libxl__remus_domain_resume_callback;
         callbacks->checkpoint = libxl__remus_domain_checkpoint_callback;
+        dss->sws.checkpoint_callback = remus_checkpoint_stream_written;
     } else
         callbacks->suspend = libxl__domain_suspend_callback;
 

@@ -2879,16 +2879,23 @@ struct libxl__stream_write_state {
     void (*completion_callback)(libxl__egc *egc,
                                 libxl__domain_suspend_state *dss,
                                 int rc);
+    void (*checkpoint_callback)(libxl__egc *egc,
+                                libxl__domain_suspend_state *dss,
+                                int rc);
     /* Private */
     int rc;
     int joined_rc;
     size_t padding;
     bool running;
+    bool in_checkpoint;
     libxl__datacopier_state dc;
 };
 
 _hidden void libxl__stream_write_start(libxl__egc *egc,
                                        libxl__stream_write_state *stream);
+
+_hidden void libxl__stream_write_start_checkpoint(
+    libxl__egc *egc, libxl__stream_write_state *stream);
 
 _hidden void libxl__stream_write_abort(libxl__egc *egc,
                                        libxl__stream_write_state *stream,
