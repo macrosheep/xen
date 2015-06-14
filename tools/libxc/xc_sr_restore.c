@@ -1,5 +1,7 @@
 #include <arpa/inet.h>
 
+#include <assert.h>
+
 #include "xc_sr_common.h"
 
 /*
@@ -472,12 +474,19 @@ static int process_record(struct xc_sr_context *ctx, struct xc_sr_record *rec);
 static int handle_checkpoint(struct xc_sr_context *ctx)
 {
     xc_interface *xch = ctx->xch;
-    int rc = 0;
+    int rc = 0, ret;
     unsigned i;
 
     if ( !ctx->restore.checkpointed )
     {
         ERROR("Found checkpoint in non-checkpointed stream");
+        rc = -1;
+        goto err;
+    }
+
+    ret = ctx->restore.callbacks->checkpoint(ctx->restore.callbacks->data);
+    if ( ret )
+    {
         rc = -1;
         goto err;
     }
@@ -734,6 +743,10 @@ int xc_domain_restore2(xc_interface *xch, int io_fd, uint32_t dom,
     ctx.restore.xenstore_domid = store_domid;
     ctx.restore.checkpointed = checkpointed_stream;
     ctx.restore.callbacks = callbacks;
+
+    /* Sanity checks for callbacks. */
+    if (checkpointed_stream)
+        assert(callbacks->checkpoint);
 
     IPRINTF("In experimental %s", __func__);
     DPRINTF("fd %d, dom %u, hvm %u, pae %u, superpages %d"

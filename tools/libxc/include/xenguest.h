@@ -102,6 +102,9 @@ struct restore_callbacks {
     int (*toolstack_restore)(uint32_t domid, const uint8_t *buf,
             uint32_t size, void* data);
 
+    /* A checkpoint record has been found in the stream */
+    int (*checkpoint)(void* data);
+
     /* to be provided as the last argument to each callback function */
     void* data;
 };
