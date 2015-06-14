@@ -2868,6 +2868,38 @@ typedef void libxl__domain_suspend_cb(libxl__egc*,
 typedef void libxl__save_device_model_cb(libxl__egc*,
                                          libxl__domain_suspend_state*, int rc);
 
+/* State for writing a libxl migration v2 stream */
+typedef struct libxl__stream_write_state libxl__stream_write_state;
+
+struct libxl__stream_write_state {
+    /* filled by the user */
+    libxl__ao *ao;
+    int fd;
+    uint32_t domid;
+    void (*completion_callback)(libxl__egc *egc,
+                                libxl__domain_suspend_state *dss,
+                                int rc);
+    /* Private */
+    int rc;
+    int joined_rc;
+    size_t padding;
+    bool running;
+    libxl__datacopier_state dc;
+};
+
+_hidden void libxl__stream_write_start(libxl__egc *egc,
+                                       libxl__stream_write_state *stream);
+
+_hidden void libxl__stream_write_abort(libxl__egc *egc,
+                                       libxl__stream_write_state *stream,
+                                       int rc);
+
+static inline bool libxl__stream_write_inuse(
+    const libxl__stream_write_state *stream)
+{
+    return stream->running;
+}
+
 typedef struct libxl__logdirty_switch {
     const char *cmd;
     const char *cmd_path;
@@ -2907,6 +2939,7 @@ struct libxl__domain_suspend_state {
     /* private for libxl__domain_save_device_model */
     libxl__save_device_model_cb *save_dm_callback;
     libxl__datacopier_state save_dm_datacopier;
+    libxl__stream_write_state sws;
 };
 
 
