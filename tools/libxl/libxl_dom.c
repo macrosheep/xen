@@ -2036,7 +2036,6 @@ void libxl__domain_suspend(libxl__egc *egc, libxl__domain_suspend_state *dss)
         callbacks->suspend = libxl__domain_suspend_callback;
 
     callbacks->switch_qemu_logdirty = libxl__domain_suspend_common_switch_qemu_logdirty;
-    dss->shs.callbacks.save.toolstack_save = libxl__toolstack_save;
 
     dss->sws.fd = dss->fd;
     dss->sws.ao = dss->ao;
