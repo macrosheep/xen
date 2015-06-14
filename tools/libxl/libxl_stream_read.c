@@ -80,6 +80,10 @@ static void emulator_padding_done(libxl__egc *egc,
                                   libxl__datacopier_state *dc,
                                   int onwrite, int errnoval);
 
+/* Error handling for checkpoint mini-loop. */
+static void checkpoint_done(libxl__egc *egc,
+                            libxl__stream_read_state *stream, int rc);
+
 void libxl__stream_read_start(libxl__egc *egc,
                               libxl__stream_read_state *stream)
 {
@@ -162,6 +166,35 @@ void libxl__stream_read_continue(libxl__egc *egc,
     stream_failed(egc, stream, ret);
 }
 
+void libxl__stream_read_start_checkpoint(libxl__egc *egc,
+                                         libxl__stream_read_state *stream)
+{
+    libxl__datacopier_state *dc = &stream->dc;
+    int ret = 0;
+
+    assert(stream->running);
+    assert(!stream->in_checkpoint);
+    stream->in_checkpoint = true;
+
+    /* Read a record header. */
+    dc->readwhat = "record header";
+    dc->readbuf = &stream->rec_hdr;
+    stream->expected_len = dc->bytes_to_read = sizeof(stream->rec_hdr);
+    dc->used = 0;
+    dc->callback = record_header_done;
+
+    ret = libxl__datacopier_start(dc);
+    if (ret)
+        goto err;
+
+    assert(!ret);
+    return;
+
+ err:
+    assert(ret);
+    stream_failed(egc, stream, ret);
+}
+
 void libxl__stream_read_abort(libxl__egc *egc,
                               libxl__stream_read_state *stream, int rc)
 {
@@ -182,6 +215,15 @@ static void stream_failed(libxl__egc *egc,
     assert(rc);
     stream->rc = rc;
 
+    /*
+     *If we are in a checkpoint, pass the failure to libxc, which will come
+     * back around to us via libxl__xc_domain_restore_done().
+     */
+    if (stream->in_checkpoint) {
+        checkpoint_done(egc, stream, rc);
+        return;
+    }
+
     if (stream->running) {
         stream->running = false;
         stream_done(egc, stream);
@@ -194,6 +236,7 @@ static void stream_done(libxl__egc *egc,
     libxl__domain_create_state *dcs = CONTAINER_OF(stream, *dcs, srs);
 
     assert(!stream->running);
+    assert(!stream->in_checkpoint);
 
     if (stream->v2_carefd)
         libxl__carefd_close(stream->v2_carefd);
@@ -452,6 +495,15 @@ static void process_record(libxl__egc *egc,
         read_emulator_body(egc, stream);
         break;
 
+    case REC_TYPE_CHECKPOINT_END:
+        if (!stream->in_checkpoint) {
+            LOG(ERROR, "Unexpected CHECKPOINT_END record in stream");
+            ret = ERROR_FAIL;
+            goto err;
+        }
+        checkpoint_done(egc, stream, 0);
+        break;
+
     default:
         LOG(ERROR, "Unrecognised record 0x%08x", rec_hdr->type);
         ret = ERROR_FAIL;
@@ -590,6 +642,16 @@ static void emulator_padding_done(libxl__egc *egc,
  err:
     assert(ret);
     stream_failed(egc, stream, ret);
+}
+
+static void checkpoint_done(libxl__egc *egc,
+                            libxl__stream_read_state *stream, int rc)
+{
+    libxl__domain_create_state *dcs = CONTAINER_OF(stream, *dcs, srs);
+
+    assert(stream->in_checkpoint);
+    stream->in_checkpoint = false;
+    stream->checkpoint_callback(egc, dcs, rc);
 }
 
 /*

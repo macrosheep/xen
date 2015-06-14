@@ -3205,11 +3205,15 @@ struct libxl__stream_read_state {
     void (*completion_callback)(libxl__egc *egc,
                                 libxl__domain_create_state *dcs,
                                 int rc);
+    void (*checkpoint_callback)(libxl__egc *egc,
+                                libxl__domain_create_state *dcs,
+                                int rc);
     /* Private */
     libxl__carefd *v2_carefd;
     int rc;
     int joined_rc;
     bool running;
+    bool in_checkpoint;
     libxl__datacopier_state dc;
     size_t expected_len;
     libxl_sr_hdr hdr;
@@ -3222,6 +3226,8 @@ _hidden void libxl__stream_read_start(libxl__egc *egc,
 
 _hidden void libxl__stream_read_continue(libxl__egc *egc,
                                          libxl__stream_read_state *stream);
+_hidden void libxl__stream_read_start_checkpoint(
+    libxl__egc *egc, libxl__stream_read_state *stream);
 
 _hidden void libxl__stream_read_abort(libxl__egc *egc,
                                       libxl__stream_read_state *stream, int rc);
