@@ -3326,6 +3326,7 @@ static inline bool libxl__save_helper_inuse(const libxl__save_helper_state *shs)
 /* Each time the dm needs to be saved, we must call suspend and then save */
 _hidden int libxl__domain_suspend_device_model(libxl__gc *gc,
                                            libxl__domain_suspend_state *dsps);
+_hidden int libxl__domain_resume_device_model(libxl__gc *gc, uint32_t domid);
 _hidden void libxl__domain_save_device_model(libxl__egc *egc,
                                      libxl__domain_save_state *dss,
                                      libxl__save_device_model_cb *callback);
