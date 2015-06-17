@@ -37,6 +37,7 @@ REC_TYPE_libxc_context    = 0x00000001
 REC_TYPE_xenstore_data    = 0x00000002
 REC_TYPE_emulator_context = 0x00000003
 REC_TYPE_checkpoint_end   = 0x00000004
+REC_TYPE_colo_context     = 0x00000005
 
 rec_type_to_str = {
     REC_TYPE_end              : "End",
@@ -44,6 +45,7 @@ rec_type_to_str = {
     REC_TYPE_xenstore_data    : "Xenstore data",
     REC_TYPE_emulator_context : "Emulator context",
     REC_TYPE_checkpoint_end   : "Checkpoint end",
+    REC_TYPE_colo_context     : "COLO context"
 }
 
 # emulator_context
@@ -184,6 +186,11 @@ class VerifyLibxl(VerifyBase):
         if len(content) != 0:
             raise RecordError("Checkpoint end record with non-zero length")
 
+    def verify_record_colo_context(self, content):
+        """ COLO context """
+        if len(content) == 0:
+            raise RecordError("COLO context record with zero length")
+
 
 record_verifiers = {
     REC_TYPE_end:
@@ -196,4 +203,6 @@ record_verifiers = {
         VerifyLibxl.verify_record_emulator_context,
     REC_TYPE_checkpoint_end:
         VerifyLibxl.verify_record_checkpoint_end,
+    REC_TYPE_colo_context:
+        VerifyLibxl.verify_record_colo_context,
 }

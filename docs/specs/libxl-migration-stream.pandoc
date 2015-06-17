@@ -121,7 +121,9 @@ type         0x00000000: END
 
              0x00000004: CHECKPOINT_END
 
-             0x00000005 - 0x7FFFFFFF: Reserved for future _mandatory_
+             0x00000005: COLO_CONTEXT
+
+             0x00000006 - 0x7FFFFFFF: Reserved for future _mandatory_
              records.
 
              0x80000000 - 0xFFFFFFFF: Reserved for future _optional_
@@ -216,3 +218,20 @@ A checkpoint end record marks the end of a checkpoint in the image.
 
 The end record contains no fields; its body_length is 0.
 
+COLO\_CONTEXT
+--------------
+
+A COLO context record contains the control information for COLO.
+
+     0     1     2     3     4     5     6     7 octet
+    +------------------------+------------------------+
+    | control_id             | padding                |
+    +------------------------+------------------------+
+
+--------------------------------------------------------------------
+Field            Description
+------------     ---------------------------------------------------
+control_id       0x00000000: New checkpoint
+                 0x00000001: Secondary VM is suspended
+                 0x00000002: Secondary VM is ready
+                 0x00000003: Secondary VM is resumed

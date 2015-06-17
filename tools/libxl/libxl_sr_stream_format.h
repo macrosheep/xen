@@ -36,6 +36,7 @@ typedef struct libxl_sr_rec_hdr
 #define REC_TYPE_XENSTORE_DATA       0x00000002U
 #define REC_TYPE_EMULATOR_CONTEXT    0x00000003U
 #define REC_TYPE_CHECKPOINT_END      0x00000004U
+#define REC_TYPE_COLO_CONTEXT        0x00000005U
 
 typedef struct libxl_sr_emulator_hdr
 {
@@ -46,6 +47,16 @@ typedef struct libxl_sr_emulator_hdr
 #define EMULATOR_UNKNOWN             0x00000000U
 #define EMULATOR_QEMU_TRADITIONAL    0x00000001U
 #define EMULATOR_QEMU_UPSTREAM       0x00000002U
+
+typedef struct libxl_sr_colo_context
+{
+    uint32_t id;
+} libxl_sr_colo_context;
+
+#define COLO_NEW_CHECKPOINT          0x00000000U
+#define COLO_SVM_SUSPENDED           0x00000001U
+#define COLO_SVM_READY               0x00000002U
+#define COLO_SVM_RESUMED             0x00000003U
 
 #endif /* LIBXL_SR_STREAM_FORMAT_H */
 
