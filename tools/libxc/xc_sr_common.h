@@ -213,6 +213,10 @@ struct xc_sr_context
             struct xc_sr_restore_ops ops;
             struct restore_callbacks *callbacks;
 
+            int send_fd;
+            unsigned long p2m_size;
+            xc_hypercall_buffer_t dirty_bitmap_hbuf;
+
             /* From Image Header. */
             uint32_t format_version;
 
