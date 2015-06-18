@@ -91,13 +91,13 @@ struct save_callbacks {
 int xc_domain_save(xc_interface *xch, int io_fd, uint32_t dom, uint32_t max_iters,
                    uint32_t max_factor, uint32_t flags /* XCFLAGS_xxx */,
                    struct save_callbacks* callbacks, int hvm,
-                   int checkpointed_stream);
+                   int checkpointed_stream, int back_fd);
 
 /* Domain Save v2 */
 int xc_domain_save2(xc_interface *xch, int io_fd, uint32_t dom, uint32_t max_iters,
                     uint32_t max_factor, uint32_t flags,
                     struct save_callbacks* callbacks, int hvm,
-                    int checkpointed_stream);
+                    int checkpointed_stream, int back_fd);
 
 /* callbacks provided by xc_domain_restore */
 struct restore_callbacks {
@@ -136,7 +136,7 @@ int xc_domain_restore(xc_interface *xch, int io_fd, uint32_t dom,
                       unsigned long *console_mfn, domid_t console_domid,
                       unsigned int hvm, unsigned int pae, int superpages,
                       int checkpointed_stream,
-                      struct restore_callbacks *callbacks);
+                      struct restore_callbacks *callbacks, int back_fd);
 
 /* Domain Restore v2 */
 int xc_domain_restore2(xc_interface *xch, int io_fd, uint32_t dom,
@@ -145,7 +145,7 @@ int xc_domain_restore2(xc_interface *xch, int io_fd, uint32_t dom,
                        unsigned long *console_mfn, domid_t console_domid,
                        unsigned int hvm, unsigned int pae, int superpages,
                        int checkpointed_stream,
-                       struct restore_callbacks *callbacks);
+                       struct restore_callbacks *callbacks, int back_fd);
 /**
  * xc_domain_restore writes a file to disk that contains the device
  * model saved state.

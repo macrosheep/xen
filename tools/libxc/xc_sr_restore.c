@@ -710,7 +710,7 @@ int xc_domain_restore2(xc_interface *xch, int io_fd, uint32_t dom,
                        unsigned long *console_gfn, domid_t console_domid,
                        unsigned int hvm, unsigned int pae, int superpages,
                        int checkpointed_stream,
-                       struct restore_callbacks *callbacks)
+                       struct restore_callbacks *callbacks, int back_fd)
 {
     struct xc_sr_context ctx =
         {
