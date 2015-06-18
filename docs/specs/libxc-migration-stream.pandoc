@@ -227,7 +227,9 @@ type         0x00000000: END
 
              0x0000000E: CHECKPOINT
 
-             0x0000000F - 0x7FFFFFFF: Reserved for future _mandatory_
+             0x0000000F: DIRTY_BITMAP
+
+             0x00000010 - 0x7FFFFFFF: Reserved for future _mandatory_
              records.
 
              0x80000000 - 0xFFFFFFFF: Reserved for future _optional_
@@ -598,6 +600,25 @@ The higher level stream may then hand the stream back to libxc to
 process another set of records for the next consistent VM state
 snapshot.  This next set of records may be terminated by another
 CHECKPOINT record or an END record.
+
+\clearpage
+
+DIRTY_BITMAP
+------------
+
+A dirty_bitmap record is used for secondary to send it's dirty bitmap
+to primary while doing a checkpoint under COLO.
+
+     0     1     2     3     4     5     6     7 octet
+    +-------------------------------------------------+
+    | pfn[0]                                          |
+    +-------------------------------------------------+
+    ...
+    +-------------------------------------------------+
+    | pfn[C-1]                                        |
+    +-------------------------------------------------+
+
+The count of the pfn is: record->length/sizeof(uint64_t).
 
 \clearpage
 
