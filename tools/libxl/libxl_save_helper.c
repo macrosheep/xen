@@ -235,6 +235,7 @@ static struct restore_callbacks helper_restore_callbacks;
 int main(int argc, char **argv)
 {
     int r;
+    int back_fd;
 
 #define NEXTARG (++argv, assert(*argv), *argv)
 
@@ -244,6 +245,7 @@ int main(int argc, char **argv)
     if (!strcmp(mode,"--save-domain")) {
 
         io_fd =                    atoi(NEXTARG);
+        back_fd =                  atoi(NEXTARG);
         uint32_t dom =             strtoul(NEXTARG,0,10);
         uint32_t max_iters =       strtoul(NEXTARG,0,10);
         uint32_t max_factor =      strtoul(NEXTARG,0,10);
@@ -259,12 +261,14 @@ int main(int argc, char **argv)
         setup_signals(save_signal_handler);
 
         r = xc_domain_save2(xch, io_fd, dom, max_iters, max_factor, flags,
-                           &helper_save_callbacks, hvm, checkpointed_stream);
+                            &helper_save_callbacks, hvm, checkpointed_stream,
+                            back_fd);
         complete(r);
 
     } else if (!strcmp(mode,"--restore-domain")) {
 
         io_fd =                    atoi(NEXTARG);
+        back_fd =                  atoi(NEXTARG);
         uint32_t dom =             strtoul(NEXTARG,0,10);
         unsigned store_evtchn =    strtoul(NEXTARG,0,10);
         domid_t store_domid =      strtoul(NEXTARG,0,10);
@@ -289,7 +293,7 @@ int main(int argc, char **argv)
                               store_domid, console_evtchn, &console_mfn,
                               console_domid, hvm, pae, superpages,
                               checkpointed,
-                              &helper_restore_callbacks);
+                              &helper_restore_callbacks, back_fd);
         helper_stub_restore_results(store_mfn,console_mfn,0);
         complete(r);
 
