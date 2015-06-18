@@ -63,6 +63,15 @@ struct save_callbacks {
      * 1: take another checkpoint */
     int (*checkpoint)(void* data);
 
+    /*
+     * Called after the checkpoint callback.
+     *
+     * returns:
+     * 0: terminate checkpointing gracefully
+     * 1: take another checkpoint
+     */
+    int (*should_checkpoint)(void* data);
+
     /* Enable qemu-dm logging dirty pages to xen */
     int (*switch_qemu_logdirty)(int domid, unsigned enable, void *data); /* HVM only */
 
@@ -107,6 +116,15 @@ struct restore_callbacks {
 
     /* A checkpoint record has been found in the stream */
     int (*checkpoint)(void* data);
+
+    /*
+     * Called after the checkpoint callback.
+     *
+     * returns:
+     * 0: terminate checkpointing gracefully
+     * 1: take another checkpoint
+     */
+    int (*should_checkpoint)(void* data);
 
     /* to be provided as the last argument to each callback function */
     void* data;
