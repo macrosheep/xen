@@ -93,6 +93,13 @@ static void emulator_padding_done(libxl__egc *egc,
 static void checkpoint_done(libxl__egc *egc,
                             libxl__stream_read_state *stream, int rc);
 
+static void handle_colo_context(libxl__egc *egc,
+                                libxl__stream_read_state *stream);
+
+/* Error handling for colo context mini-loop */
+static void colo_context_done(libxl__egc *egc,
+                              libxl__stream_read_state *stream, int rc);
+
 void libxl__stream_read_start(libxl__egc *egc,
                               libxl__stream_read_state *stream)
 {
@@ -190,6 +197,7 @@ void libxl__stream_read_start_checkpoint(libxl__egc *egc,
     assert(stream->running);
     assert(!stream->in_checkpoint);
     assert(!stream->back_channel);
+    assert(!stream->in_colo_context);
     stream->in_checkpoint = true;
 
     /* Read a record header. */
@@ -209,6 +217,17 @@ void libxl__stream_read_start_checkpoint(libxl__egc *egc,
  err:
     assert(ret);
     stream_failed(egc, stream, ret);
+}
+
+void libxl__stream_read_colo_context(libxl__egc *egc,
+                                     libxl__stream_read_state *stream)
+{
+    assert(stream->running);
+    assert(!stream->in_checkpoint);
+    assert(!stream->in_colo_context);
+    stream->in_colo_context = true;
+
+    libxl__stream_read_continue(egc, stream);
 }
 
 void libxl__stream_read_abort(libxl__egc *egc,
@@ -240,6 +259,12 @@ static void stream_failed(libxl__egc *egc,
         return;
     }
 
+    if (stream->in_colo_context) {
+        assert(rc < 0);
+        colo_context_done(egc, stream, rc);
+        return;
+    }
+
     if (stream->back_channel) {
         stream->completion_callback(egc, stream, rc);
         return;
@@ -259,6 +284,7 @@ static void stream_done(libxl__egc *egc,
     assert(!stream->running);
     assert(!stream->in_checkpoint);
     assert(!stream->back_channel);
+    assert(!stream->in_colo_context);
 
     if (stream->v2_carefd)
         libxl__carefd_close(stream->v2_carefd);
@@ -531,6 +557,15 @@ static void process_record(libxl__egc *egc,
         checkpoint_done(egc, stream, 0);
         break;
 
+    case REC_TYPE_COLO_CONTEXT:
+        if (!stream->in_colo_context) {
+            LOG(ERROR, "Unexpected COLO_CONTEXT record in stream");
+            ret = ERROR_FAIL;
+            goto err;
+        }
+        handle_colo_context(egc, stream);
+        break;
+
     default:
         LOG(ERROR, "Unrecognised record 0x%08x", rec_hdr->type);
         ret = ERROR_FAIL;
@@ -671,11 +706,27 @@ static void emulator_padding_done(libxl__egc *egc,
     stream_failed(egc, stream, ret);
 }
 
+static void handle_colo_context(libxl__egc *egc,
+                                libxl__stream_read_state *stream)
+{
+    libxl_sr_colo_context *colo_context = stream->rec_body;
+
+    colo_context_done(egc, stream, colo_context->id);
+}
+
 static void checkpoint_done(libxl__egc *egc,
                             libxl__stream_read_state *stream, int rc)
 {
     assert(stream->in_checkpoint);
     stream->in_checkpoint = false;
+    stream->read_records_callback(egc, stream, rc);
+}
+
+static void colo_context_done(libxl__egc *egc,
+                              libxl__stream_read_state *stream, int rc)
+{
+    assert(stream->in_colo_context);
+    stream->in_colo_context = false;
     stream->read_records_callback(egc, stream, rc);
 }
 

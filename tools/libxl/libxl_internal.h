@@ -3249,6 +3249,7 @@ struct libxl__stream_read_state {
     int joined_rc;
     bool running;
     bool in_checkpoint;
+    bool in_colo_context;
     libxl__datacopier_state dc;
     size_t expected_len;
     libxl_sr_hdr hdr;
@@ -3262,6 +3263,8 @@ _hidden void libxl__stream_read_start(libxl__egc *egc,
 _hidden void libxl__stream_read_continue(libxl__egc *egc,
                                          libxl__stream_read_state *stream);
 _hidden void libxl__stream_read_start_checkpoint(
+    libxl__egc *egc, libxl__stream_read_state *stream);
+_hidden void libxl__stream_read_colo_context(
     libxl__egc *egc, libxl__stream_read_state *stream);
 
 _hidden void libxl__stream_read_abort(libxl__egc *egc,
