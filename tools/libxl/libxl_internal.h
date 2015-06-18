@@ -2877,12 +2877,13 @@ struct libxl__stream_write_state {
     libxl__ao *ao;
     int fd;
     uint32_t domid;
+    bool back_channel;
     void (*completion_callback)(libxl__egc *egc,
-                                libxl__domain_save_state *dss,
+                                libxl__stream_write_state *stream,
                                 int rc);
-    void (*checkpoint_callback)(libxl__egc *egc,
-                                libxl__domain_save_state *dss,
-                                int rc);
+    void (*write_records_callback)(libxl__egc *egc,
+                                   libxl__stream_write_state *stream,
+                                   int rc);
     /* Private */
     int rc;
     int joined_rc;

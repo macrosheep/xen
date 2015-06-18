@@ -30,7 +30,7 @@ struct libxl__physmap_info {
 /*========================= Domain save ============================*/
 
 static void stream_done(libxl__egc *egc,
-                        libxl__domain_save_state *dss, int rc);
+                        libxl__stream_write_state *stream, int rc);
 static void domain_save_done(libxl__egc *egc,
                              libxl__domain_save_state *dss, int rc);
 
@@ -445,6 +445,7 @@ void libxl__domain_save(libxl__egc *egc, libxl__domain_save_state *dss)
 
     dss->sws.fd = dss->fd;
     dss->sws.ao = dss->ao;
+    dss->sws.back_channel = false;
     dss->sws.completion_callback = stream_done;
 
     libxl__stream_write_start(egc, &dss->sws);
@@ -455,8 +456,10 @@ void libxl__domain_save(libxl__egc *egc, libxl__domain_save_state *dss)
 }
 
 static void stream_done(libxl__egc *egc,
-                        libxl__domain_save_state *dss, int rc)
+                        libxl__stream_write_state *stream, int rc)
 {
+    libxl__domain_save_state *dss = CONTAINER_OF(stream, *dss, sws);
+
     domain_save_done(egc, dss, rc);
 }
 

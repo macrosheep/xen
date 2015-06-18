@@ -48,6 +48,13 @@
  *  - Toolstack record
  *  - if (hvm), Qemu record
  *  - Checkpoint end record
+ *
+ * For back channel stream:
+ * - libxl__stream_write_start()
+ *    - Set up the stream to running state
+ *
+ * - Add a new API to write the record. When the record is written
+ *   out, call stream->write_records_callback() to return.
  */
 
 static const uint8_t zero_padding[1U << REC_ALIGN_ORDER] = { 0 };
@@ -111,6 +118,9 @@ void libxl__stream_write_start(libxl__egc *egc,
     assert(!stream->running);
     stream->running = true;
 
+    if (stream->back_channel)
+        return;
+
     memset(dc, 0, sizeof(*dc));
     dc->readwhat = "";
     dc->copywhat = "suspend header";
@@ -143,6 +153,7 @@ void libxl__stream_write_start_checkpoint(libxl__egc *egc,
 {
     assert(stream->running);
     assert(!stream->in_checkpoint);
+    assert(!stream->back_channel);
     stream->in_checkpoint = true;
 
     write_toolstack_record(egc, stream);
@@ -175,6 +186,11 @@ static void stream_failed(libxl__egc *egc,
      */
     if (stream->in_checkpoint) {
         checkpoint_done(egc, stream, rc);
+        return;
+    }
+
+    if (stream->back_channel) {
+        stream->completion_callback(egc, stream, rc);
         return;
     }
 
@@ -231,7 +247,7 @@ static void check_stream_finished(libxl__egc *egc,
         LOG(DEBUG, "save/restore still in use");
     else {
         LOG(INFO, "Join complete: result %d", stream->joined_rc);
-        stream->completion_callback(egc, dss, stream->joined_rc);
+        stream->completion_callback(egc, stream, stream->joined_rc);
     }
 }
 
@@ -577,11 +593,9 @@ static void checkpoint_done(libxl__egc *egc,
                             libxl__stream_write_state *stream,
                             int rc)
 {
-    libxl__domain_save_state *dss = CONTAINER_OF(stream, *dss, sws);
-
     assert(stream->in_checkpoint);
     stream->in_checkpoint = false;
-    stream->checkpoint_callback(egc, dss, rc);
+    stream->write_records_callback(egc, stream, rc);
 }
 
 static void write_checkpoint_end_record(libxl__egc *egc,

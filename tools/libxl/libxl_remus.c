@@ -205,7 +205,7 @@ out:
 /*----- remus asynchronous checkpoint callback -----*/
 
 static void remus_checkpoint_stream_written(
-                    libxl__egc *egc, libxl__domain_save_state *dss, int rc);
+                    libxl__egc *egc, libxl__stream_write_state *stream, int rc);
 static void remus_devices_commit_cb(libxl__egc *egc,
                                     libxl__remus_devices_state *rds,
                                     int rc);
@@ -219,13 +219,15 @@ void libxl__remus_domain_save_checkpoint_callback(void *data)
     libxl__egc *egc = dss->shs.egc;
     STATE_AO_GC(dss->ao);
 
-    dss->sws.checkpoint_callback = remus_checkpoint_stream_written;
+    dss->sws.write_records_callback = remus_checkpoint_stream_written;
     libxl__stream_write_start_checkpoint(egc, &dss->sws);
 }
 
 static void remus_checkpoint_stream_written(
-                libxl__egc *egc, libxl__domain_save_state *dss, int rc)
+                libxl__egc *egc, libxl__stream_write_state *stream, int rc)
 {
+    libxl__domain_save_state *dss = CONTAINER_OF(stream, *dss, sws);
+
     /* Convenience aliases */
     libxl__remus_devices_state *const rds = &dss->rds;
 
