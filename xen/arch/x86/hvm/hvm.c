@@ -2469,6 +2469,7 @@ struct hvm_ioreq_server *hvm_select_ioreq_server(struct domain *d,
     uint32_t cf8;
     uint8_t type;
     uint64_t addr;
+    int not_default_found = 0;
 
     if ( list_empty(&d->arch.hvm_domain.ioreq_server.list) )
         return NULL;
@@ -2522,6 +2523,8 @@ struct hvm_ioreq_server *hvm_select_ioreq_server(struct domain *d,
         if ( s == d->arch.hvm_domain.default_ioreq_server )
             continue;
 
+        not_default_found = 1;
+
         if ( !s->enabled )
             continue;
 
@@ -2557,6 +2560,9 @@ struct hvm_ioreq_server *hvm_select_ioreq_server(struct domain *d,
             break;
         }
     }
+
+    if (not_default_found)
+        return NULL;
 
     return d->arch.hvm_domain.default_ioreq_server;
 }
