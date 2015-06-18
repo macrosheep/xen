@@ -114,6 +114,16 @@ struct restore_callbacks {
     int (*toolstack_restore)(uint32_t domid, const uint8_t *buf,
             uint32_t size, void* data);
 
+    /* Called after a new checkpoint to suspend the guest.
+     */
+    int (*suspend)(void* data);
+
+    /* Called after the secondary vm is ready to resume.
+     * Callback function resumes the guest & the device model,
+     * returns to xc_domain_restore.
+     */
+    int (*postcopy)(void* data);
+
     /* A checkpoint record has been found in the stream.
      * returns: */
 #define XGR_CHECKPOINT_ERROR    0 /* Terminate processing */
