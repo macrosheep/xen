@@ -107,6 +107,15 @@ static void checkpoint_end_record_done(libxl__egc *egc,
                                        libxl__datacopier_state *dc,
                                        int onwrite, int errnoval);
 
+static void write_colo_context(libxl__egc *egc,
+                               libxl__stream_write_state *stream,
+                               libxl_sr_colo_context *colo_context);
+static void write_colo_context_done(libxl__egc *egc,
+                              libxl__datacopier_state *dc,
+                              int onwrite, int errnoval);
+static void colo_context_done(libxl__egc *egc,
+                              libxl__stream_write_state *stream, int rc);
+
 void libxl__stream_write_start(libxl__egc *egc,
                                libxl__stream_write_state *stream)
 {
@@ -154,9 +163,22 @@ void libxl__stream_write_start_checkpoint(libxl__egc *egc,
     assert(stream->running);
     assert(!stream->in_checkpoint);
     assert(!stream->back_channel);
+    assert(!stream->in_colo_context);
     stream->in_checkpoint = true;
 
     write_toolstack_record(egc, stream);
+}
+
+void libxl__stream_write_colo_context(libxl__egc *egc,
+                                      libxl__stream_write_state *stream,
+                                      libxl_sr_colo_context *colo_context)
+{
+    assert(stream->running);
+    assert(!stream->in_checkpoint);
+    assert(!stream->in_colo_context);
+    stream->in_colo_context = true;
+
+    write_colo_context(egc, stream, colo_context);
 }
 
 void libxl__stream_write_abort(libxl__egc *egc,
@@ -171,6 +193,7 @@ static void stream_success(libxl__egc *egc, libxl__stream_write_state *stream)
     stream->running = false;
 
     assert(!stream->in_checkpoint);
+    assert(!stream->in_colo_context);
     stream_done(egc, stream);
 }
 
@@ -186,6 +209,11 @@ static void stream_failed(libxl__egc *egc,
      */
     if (stream->in_checkpoint) {
         checkpoint_done(egc, stream, rc);
+        return;
+    }
+
+    if (stream->in_colo_context) {
+        colo_context_done(egc, stream, rc);
         return;
     }
 
@@ -207,6 +235,7 @@ static void stream_done(libxl__egc *egc,
 
     assert(!stream->running);
     assert(!stream->in_checkpoint);
+    assert(!stream->in_colo_context);
 
     check_stream_finished(egc, dss, stream->rc, "stream");
 }
@@ -544,6 +573,61 @@ static void emulator_padding_done(libxl__egc *egc,
     stream_failed(egc, stream, ret);
 }
 
+static void write_colo_context(libxl__egc *egc,
+                               libxl__stream_write_state *stream,
+                               libxl_sr_colo_context *colo_context)
+{
+    libxl__datacopier_state *dc = &stream->dc;
+    STATE_AO_GC(stream->ao);
+    struct libxl_sr_rec_hdr rec = { REC_TYPE_COLO_CONTEXT, 0 };
+    int ret = 0;
+    uint32_t padding_len;
+
+    dc->copywhat = "colo context record";
+    dc->writewhat = "save/migration stream";
+    dc->callback = write_colo_context_done;
+
+    ret = libxl__datacopier_start(dc);
+    if (ret)
+        goto err;
+
+    rec.length = sizeof(*colo_context);
+
+    libxl__datacopier_prefixdata(egc, dc, &rec, sizeof(rec));
+    libxl__datacopier_prefixdata(egc, dc, colo_context, rec.length);
+
+    padding_len = ROUNDUP(rec.length, REC_ALIGN_ORDER) - rec.length;
+    if (padding_len)
+        libxl__datacopier_prefixdata(egc, dc, zero_padding, padding_len);
+
+    return;
+
+ err:
+    assert(ret);
+    stream_failed(egc, stream, ret);
+}
+
+static void write_colo_context_done(libxl__egc *egc,
+                                    libxl__datacopier_state *dc,
+                                    int onwrite, int errnoval)
+{
+    libxl__stream_write_state *stream = CONTAINER_OF(dc, *stream, dc);
+    STATE_AO_GC(stream->ao);
+    int ret = 0;
+
+    if (onwrite || errnoval) {
+        ret = ERROR_FAIL;
+        goto err;
+    }
+
+    colo_context_done(egc, stream, 0);
+    return;
+
+ err:
+    assert(ret);
+    stream_failed(egc, stream, ret);
+}
+
 static void write_end_record(libxl__egc *egc,
                              libxl__stream_write_state *stream)
 {
@@ -643,6 +727,14 @@ static void checkpoint_end_record_done(libxl__egc *egc,
  err:
     assert(ret);
     stream_failed(egc, stream, ret);
+}
+
+static void colo_context_done(libxl__egc *egc,
+                              libxl__stream_write_state *stream, int rc)
+{
+    assert(stream->in_colo_context);
+    stream->in_colo_context = false;
+    stream->write_records_callback(egc, stream, rc);
 }
 
 /*
