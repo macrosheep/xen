@@ -1444,7 +1444,7 @@ int xc_domain_restore(xc_interface *xch, int io_fd, uint32_t dom,
                       unsigned long *console_mfn, domid_t console_domid,
                       unsigned int hvm, unsigned int pae, int superpages,
                       int checkpointed_stream,
-                      struct restore_callbacks *callbacks)
+                      struct restore_callbacks *callbacks, int back_fd)
 {
     DECLARE_DOMCTL;
     xc_dominfo_t info;
@@ -1507,7 +1507,7 @@ int xc_domain_restore(xc_interface *xch, int io_fd, uint32_t dom,
         return xc_domain_restore2(
             xch, io_fd, dom, store_evtchn, store_mfn,
             store_domid, console_evtchn, console_mfn, console_domid,
-            hvm,  pae,  superpages, checkpointed_stream, callbacks);
+            hvm,  pae,  superpages, checkpointed_stream, callbacks, back_fd);
     }
 
     DPRINTF("%s: starting restore of new domid %u", __func__, dom);
