@@ -409,6 +409,92 @@ static int handle_page_data(struct xc_sr_context *ctx, struct xc_sr_record *rec)
     return rc;
 }
 
+/*
+ * Send dirty_bitmap to primary.
+ */
+static int send_dirty_bitmap(struct xc_sr_context *ctx)
+{
+    xc_interface *xch = ctx->xch;
+    int rc = -1;
+    unsigned count, written;
+    uint64_t i, *pfns = NULL;
+    struct iovec *iov = NULL;
+    xc_shadow_op_stats_t stats = { 0, ctx->save.p2m_size };
+    struct xc_sr_record rec =
+    {
+        .type = REC_TYPE_DIRTY_BITMAP,
+    };
+    DECLARE_HYPERCALL_BUFFER_SHADOW(unsigned long, dirty_bitmap,
+                                    &ctx->save.dirty_bitmap_hbuf);
+
+    if ( xc_shadow_control(
+             xch, ctx->domid, XEN_DOMCTL_SHADOW_OP_CLEAN,
+             HYPERCALL_BUFFER(dirty_bitmap), ctx->restore.p2m_size,
+             NULL, 0, &stats) != ctx->restore.p2m_size )
+    {
+        PERROR("Failed to retrieve logdirty bitmap");
+        goto err;
+    }
+
+    for ( i = 0, count = 0; i < ctx->restore.p2m_size; i++ )
+    {
+        if ( test_bit(i, dirty_bitmap) )
+            count++;
+    }
+
+
+    pfns = malloc(count * sizeof(*pfns));
+    if ( !pfns )
+    {
+        ERROR("Unable to allocate %zu bytes of memory for dirty pfn list",
+              count * sizeof(*pfns));
+        goto err;
+    }
+
+    for ( i = 0, written = 0; i < ctx->restore.p2m_size; ++i )
+    {
+        if ( !test_bit(i, dirty_bitmap) )
+            continue;
+
+        if ( written > count )
+        {
+            ERROR("Dirty pfn list exceed");
+            goto err;
+        }
+
+        pfns[written++] = i;
+    }
+
+    /* iovec[] for writev(). */
+    iov = malloc(3 * sizeof(*iov));
+    if ( !iov )
+    {
+        ERROR("Unable to allocate memory for sending dirty bitmap");
+        goto err;
+    }
+
+    rec.length = count * sizeof(*pfns);
+
+    iov[0].iov_base = &rec.type;
+    iov[0].iov_len = sizeof(rec.type);
+
+    iov[1].iov_base = &rec.length;
+    iov[1].iov_len = sizeof(rec.length);
+
+    iov[2].iov_base = pfns;
+    iov[2].iov_len = count * sizeof(*pfns);
+
+    if ( writev_exact(ctx->restore.send_fd, iov, 3) )
+    {
+        PERROR("Failed to write dirty bitmap to stream");
+        goto err;
+    }
+
+    rc = 0;
+ err:
+    return rc;
+}
+
 static int process_record(struct xc_sr_context *ctx, struct xc_sr_record *rec);
 static int handle_checkpoint(struct xc_sr_context *ctx)
 {
@@ -494,7 +580,9 @@ static int handle_checkpoint(struct xc_sr_context *ctx)
 
 #undef HANDLE_CALLBACK_RETURN_VALUE
 
-        /* TODO: send dirty bitmap to primary */
+        rc = send_dirty_bitmap(ctx);
+        if ( rc )
+            goto err;
     }
 
  err:
@@ -566,6 +654,21 @@ static int setup(struct xc_sr_context *ctx)
 {
     xc_interface *xch = ctx->xch;
     int rc;
+    DECLARE_HYPERCALL_BUFFER_SHADOW(unsigned long, dirty_bitmap,
+                                    &ctx->restore.dirty_bitmap_hbuf);
+
+    if ( ctx->restore.checkpointed == MIG_STREAM_COLO )
+    {
+        dirty_bitmap = xc_hypercall_buffer_alloc_pages(xch, dirty_bitmap,
+                                NRPAGES(bitmap_size(ctx->restore.p2m_size)));
+
+        if ( !dirty_bitmap )
+        {
+            ERROR("Unable to allocate memory for dirty bitmap");
+            rc = -1;
+            goto err;
+        }
+    }
 
     rc = ctx->restore.ops.setup(ctx);
     if ( rc )
@@ -599,10 +702,15 @@ static void cleanup(struct xc_sr_context *ctx)
 {
     xc_interface *xch = ctx->xch;
     unsigned i;
+    DECLARE_HYPERCALL_BUFFER_SHADOW(unsigned long, dirty_bitmap,
+                                    &ctx->save.dirty_bitmap_hbuf);
 
     for ( i = 0; i < ctx->restore.buffered_rec_num; i++ )
         free(ctx->restore.buffered_records[i].data);
 
+    if ( ctx->restore.checkpointed == MIG_STREAM_COLO )
+        xc_hypercall_buffer_free_pages(xch, dirty_bitmap,
+                                   NRPAGES(bitmap_size(ctx->save.p2m_size)));
     free(ctx->restore.buffered_records);
     free(ctx->restore.populated_pfns);
     if ( ctx->restore.ops.cleanup(ctx) )
@@ -713,6 +821,7 @@ int xc_domain_restore2(xc_interface *xch, int io_fd, uint32_t dom,
                        int checkpointed_stream,
                        struct restore_callbacks *callbacks, int back_fd)
 {
+    xen_pfn_t nr_pfns;
     struct xc_sr_context ctx =
         {
             .xch = xch,
@@ -726,6 +835,7 @@ int xc_domain_restore2(xc_interface *xch, int io_fd, uint32_t dom,
     ctx.restore.xenstore_domid = store_domid;
     ctx.restore.checkpointed = checkpointed_stream;
     ctx.restore.callbacks = callbacks;
+    ctx.restore.send_fd = back_fd;
 
     /* Sanity checks for callbacks. */
     if ( checkpointed_stream )
@@ -760,6 +870,14 @@ int xc_domain_restore2(xc_interface *xch, int io_fd, uint32_t dom,
 
     if ( read_headers(&ctx) )
         return -1;
+
+    if ( xc_domain_nr_gpfns(xch, dom, &nr_pfns) < 0 )
+    {
+        PERROR("Unable to obtain the guest p2m size");
+        return -1;
+    }
+
+    ctx.restore.p2m_size = nr_pfns;
 
     if ( ctx.dominfo.hvm )
     {
