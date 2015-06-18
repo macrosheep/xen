@@ -780,7 +780,7 @@ static void domcreate_console_available(libxl__egc *egc,
                                         libxl__domain_create_state *dcs);
 
 static void domcreate_stream_done(libxl__egc *egc,
-                                  libxl__domain_create_state *dcs,
+                                  libxl__stream_read_state *stream,
                                   int ret);
 
 static void domcreate_rebuild_done(libxl__egc *egc,
@@ -1046,13 +1046,14 @@ static void domcreate_bootloader_done(libxl__egc *egc,
     dcs->srs.ao = ao;
     dcs->srs.fd = restore_fd;
     dcs->srs.legacy = (dcs->restore_params.stream_version == 1);
+    dcs->srs.back_channel = false;
     dcs->srs.completion_callback = domcreate_stream_done;
 
     libxl__stream_read_start(egc, &dcs->srs);
     return;
 
  out:
-    domcreate_stream_done(egc, dcs, rc);
+    domcreate_stream_done(egc, &dcs->srs, rc);
 }
 
 void libxl__srm_callout_callback_restore_results(unsigned long store_mfn,
@@ -1069,9 +1070,10 @@ void libxl__srm_callout_callback_restore_results(unsigned long store_mfn,
 }
 
 static void domcreate_stream_done(libxl__egc *egc,
-                                  libxl__domain_create_state *dcs,
+                                  libxl__stream_read_state *stream,
                                   int ret)
 {
+    libxl__domain_create_state *dcs = CONTAINER_OF(stream, *dcs, srs);
     STATE_AO_GC(dcs->ao);
     libxl_ctx *ctx = libxl__gc_owner(gc);
     char **vments = NULL, **localents = NULL;

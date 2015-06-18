@@ -42,6 +42,15 @@
  * Depending on the contents of the stream, there are likely to be several
  * parallel tasks being managed.  check_stream_finished() is used to join all
  * tasks in both success and error cases.
+ *
+ * For back channel stream:
+ * - libxl__stream_read_start()
+ *    - Set up the stream to running state
+ *
+ * - libxl__stream_read_continue()
+ *     - Set up reading the next record from a started stream.
+ *       You need to add some codes to process_record() to handle
+ *       the record. Then call stream->read_records_callback() to return.
  */
 
 static void stream_success(libxl__egc *egc,
@@ -94,6 +103,12 @@ void libxl__stream_read_start(libxl__egc *egc,
 
     /* State initialisation. */
     assert(!stream->running);
+    assert(!stream->legacy || !stream->back_channel);
+
+    if (stream->back_channel) {
+        stream->running = true;
+        return;
+    }
 
     if (stream->legacy) {
         /* Convert a legacy stream, if needed. */
@@ -174,6 +189,7 @@ void libxl__stream_read_start_checkpoint(libxl__egc *egc,
 
     assert(stream->running);
     assert(!stream->in_checkpoint);
+    assert(!stream->back_channel);
     stream->in_checkpoint = true;
 
     /* Read a record header. */
@@ -224,6 +240,11 @@ static void stream_failed(libxl__egc *egc,
         return;
     }
 
+    if (stream->back_channel) {
+        stream->completion_callback(egc, stream, rc);
+        return;
+    }
+
     if (stream->running) {
         stream->running = false;
         stream_done(egc, stream);
@@ -237,6 +258,7 @@ static void stream_done(libxl__egc *egc,
 
     assert(!stream->running);
     assert(!stream->in_checkpoint);
+    assert(!stream->back_channel);
 
     if (stream->v2_carefd)
         libxl__carefd_close(stream->v2_carefd);
@@ -287,7 +309,7 @@ static void check_stream_finished(libxl__egc *egc,
         LOG(DEBUG, "save/restore still in use");
     else {
         LOG(INFO, "Join complete: result %d", stream->joined_rc);
-        stream->completion_callback(egc, dcs, stream->joined_rc);
+        stream->completion_callback(egc, stream, stream->joined_rc);
     }
 }
 
@@ -471,14 +493,17 @@ static void process_record(libxl__egc *egc,
     switch (rec_hdr->type) {
 
     case REC_TYPE_END:
+        assert(!stream->back_channel);
         /* Handled later, after cleanup. */
         break;
 
     case REC_TYPE_LIBXC_CONTEXT:
+        assert(!stream->back_channel);
         libxl__xc_domain_restore(egc, dcs, stream->fd, 0, 0, 0);
         break;
 
     case REC_TYPE_XENSTORE_DATA:
+        assert(!stream->back_channel);
         ret = libxl__toolstack_restore(dcs->guest_domid, stream->rec_body,
                                        rec_hdr->length, &dcs->shs);
         if (ret)
@@ -492,10 +517,12 @@ static void process_record(libxl__egc *egc,
         break;
 
     case REC_TYPE_EMULATOR_CONTEXT:
+        assert(!stream->back_channel);
         read_emulator_body(egc, stream);
         break;
 
     case REC_TYPE_CHECKPOINT_END:
+        assert(!stream->back_channel);
         if (!stream->in_checkpoint) {
             LOG(ERROR, "Unexpected CHECKPOINT_END record in stream");
             ret = ERROR_FAIL;
@@ -647,11 +674,9 @@ static void emulator_padding_done(libxl__egc *egc,
 static void checkpoint_done(libxl__egc *egc,
                             libxl__stream_read_state *stream, int rc)
 {
-    libxl__domain_create_state *dcs = CONTAINER_OF(stream, *dcs, srs);
-
     assert(stream->in_checkpoint);
     stream->in_checkpoint = false;
-    stream->checkpoint_callback(egc, dcs, rc);
+    stream->read_records_callback(egc, stream, rc);
 }
 
 /*

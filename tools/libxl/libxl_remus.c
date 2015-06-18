@@ -303,7 +303,7 @@ static void remus_next_checkpoint(libxl__egc *egc, libxl__ev_time *ev,
 /*----- remus asynchronous checkpoint callback -----*/
 
 static void remus_checkpoint_stream_done(
-    libxl__egc *egc, libxl__domain_create_state *dcs, int rc);
+    libxl__egc *egc, libxl__stream_read_state *stream, int rc);
 
 void libxl__remus_domain_restore_checkpoint_callback(void *data)
 {
@@ -312,13 +312,15 @@ void libxl__remus_domain_restore_checkpoint_callback(void *data)
     libxl__egc *egc = dcs->shs.egc;
     STATE_AO_GC(dcs->ao);
 
-    dcs->srs.checkpoint_callback = remus_checkpoint_stream_done;
+    dcs->srs.read_records_callback = remus_checkpoint_stream_done;
     libxl__stream_read_start_checkpoint(egc, &dcs->srs);
 }
 
 static void remus_checkpoint_stream_done(
-    libxl__egc *egc, libxl__domain_create_state *dcs, int rc)
+    libxl__egc *egc, libxl__stream_read_state *stream, int rc)
 {
+    libxl__domain_create_state *dcs = CONTAINER_OF(stream, *dcs, srs);
+
     libxl__xc_domain_saverestore_async_callback_done(egc, &dcs->shs, rc);
 }
 /*

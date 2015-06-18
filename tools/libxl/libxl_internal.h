@@ -3223,12 +3223,13 @@ struct libxl__stream_read_state {
     libxl__ao *ao;
     int fd;
     bool legacy;
+    bool back_channel;
     void (*completion_callback)(libxl__egc *egc,
-                                libxl__domain_create_state *dcs,
+                                libxl__stream_read_state *stream,
                                 int rc);
-    void (*checkpoint_callback)(libxl__egc *egc,
-                                libxl__domain_create_state *dcs,
-                                int rc);
+    void (*read_records_callback)(libxl__egc *egc,
+                                  libxl__stream_read_state *stream,
+                                  int rc);
     /* Private */
     libxl__carefd *v2_carefd;
     int rc;
