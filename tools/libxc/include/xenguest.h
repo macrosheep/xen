@@ -63,6 +63,15 @@ struct save_callbacks {
      * 1: take another checkpoint */
     int (*checkpoint)(void* data);
 
+    /*
+     * Called after the checkpoint callback.
+     *
+     * returns:
+     * 0: terminate checkpointing gracefully
+     * 1: take another checkpoint
+     */
+    int (*should_checkpoint)(void* data);
+
     /* Enable qemu-dm logging dirty pages to xen */
     int (*switch_qemu_logdirty)(int domid, unsigned enable, void *data); /* HVM only */
 
@@ -111,6 +120,15 @@ struct restore_callbacks {
 #define XGR_CHECKPOINT_SUCCESS  1 /* Continue reading more data from the stream */
 #define XGR_CHECKPOINT_FAILOVER 2 /* Failover and resume VM */
     int (*checkpoint)(void* data);
+
+    /*
+     * Called after the checkpoint callback.
+     *
+     * returns:
+     * 0: terminate checkpointing gracefully
+     * 1: take another checkpoint
+     */
+    int (*should_checkpoint)(void* data);
 
     /* to be provided as the last argument to each callback function */
     void* data;
