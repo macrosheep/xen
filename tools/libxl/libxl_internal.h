@@ -2921,6 +2921,8 @@ typedef struct libxl__logdirty_switch {
     libxl__ev_time timeout;
 } libxl__logdirty_switch;
 
+_hidden void libxl__logdirty_init(libxl__logdirty_switch *lds);
+
 struct libxl__domain_suspend_state {
     /* set by caller of domain_suspend_callback_common */
     libxl__ao *ao;
