@@ -684,6 +684,7 @@ static void libxl__remus_domain_restore_checkpoint_callback(void *data)
     libxl__egc *egc = shs->egc;
     STATE_AO_GC(dcs->ao);
 
+    dcs->srs.checkpoint_callback = remus_checkpoint_stream_done;
     libxl__stream_read_start_checkpoint(egc, &dcs->srs);
 }
 
@@ -1000,7 +1001,6 @@ static void domcreate_bootloader_done(libxl__egc *egc,
     dcs->srs.fd = restore_fd;
     dcs->srs.legacy = (dcs->restore_params.stream_version == 1);
     dcs->srs.completion_callback = domcreate_stream_done;
-    dcs->srs.checkpoint_callback = remus_checkpoint_stream_done;
 
     libxl__stream_read_start(egc, &dcs->srs);
     return;
