@@ -1865,6 +1865,9 @@ static void save_device_model_datacopier_done(libxl__egc *egc,
     dss->save_dm_callback(egc, dss, our_rc);
 }
 
+static void libxl__remus_teardown(libxl__egc *egc,
+                                  libxl__domain_suspend_state *dss,
+                                  int rc);
 static void remus_teardown_done(libxl__egc *egc,
                                        libxl__remus_devices_state *rds,
                                        int rc);
@@ -1894,6 +1897,15 @@ static void domain_save_done(libxl__egc *egc,
      * from sending checkpoints. Teardown the network buffers and
      * release netlink resources.  This is an async op.
      */
+    libxl__remus_teardown(egc, dss, rc);
+}
+
+static void libxl__remus_teardown(libxl__egc *egc,
+                                  libxl__domain_suspend_state *dss,
+                                  int rc)
+{
+    EGC_GC;
+
     LOG(WARN, "Remus: Domain suspend terminated with rc %d,"
         " teardown Remus devices...", rc);
     dss->rds.callback = remus_teardown_done;
