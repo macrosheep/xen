@@ -672,28 +672,6 @@ static int store_libxl_entry(libxl__gc *gc, uint32_t domid,
         libxl_device_model_version_to_string(b_info->device_model_version));
 }
 
-/*----- remus asynchronous checkpoint callback -----*/
-
-static void remus_checkpoint_stream_done(
-    libxl__egc *egc, libxl__stream_read_state *srs, int rc);
-
-static void libxl__remus_domain_restore_checkpoint_callback(void *data)
-{
-    libxl__save_helper_state *shs = data;
-    libxl__domain_create_state *dcs = shs->caller_state;
-    libxl__egc *egc = shs->egc;
-    STATE_AO_GC(dcs->ao);
-
-    dcs->srs.checkpoint_callback = remus_checkpoint_stream_done;
-    libxl__stream_read_start_checkpoint(egc, &dcs->srs);
-}
-
-static void remus_checkpoint_stream_done(
-    libxl__egc *egc, libxl__stream_read_state *stream, int rc)
-{
-    libxl__xc_domain_saverestore_async_callback_done(egc, &stream->shs, rc);
-}
-
 /*----- main domain creation -----*/
 
 /* We have a linear control flow; only one event callback is
