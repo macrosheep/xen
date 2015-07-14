@@ -428,7 +428,6 @@ void libxl__domain_save(libxl__egc *egc, libxl__domain_save_state *dss)
           | (dss->hvm ? XCFLAGS_HVM : 0);
 
     if (dss->checkpointed_stream == LIBXL_CHECKPOINTED_STREAM_REMUS) {
-        dss->interval = r_info->interval;
         if (libxl_defbool_val(r_info->compression))
             dss->xcflags |= XCFLAGS_CHECKPOINT_COMPRESS;
     }
@@ -578,7 +577,7 @@ static void domain_save_done(libxl__egc *egc,
      * from sending checkpoints. Teardown the network buffers and
      * release netlink resources.  This is an async op.
      */
-    libxl__remus_teardown(egc, dss, rc);
+    libxl__remus_teardown(egc, &dss->rs, rc);
 }
 
 /*========================= Domain restore ============================*/
