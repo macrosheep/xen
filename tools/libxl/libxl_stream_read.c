@@ -104,6 +104,15 @@
  * Depending on the contents of the stream, there are likely to be several
  * parallel tasks being managed.  check_all_finished() is used to join all
  * tasks in both success and error cases.
+ *
+ * For back channel stream:
+ * - libxl__stream_read_start()
+ *    - Set up the stream to running state
+ *
+ * - libxl__stream_read_continue()
+ *     - Set up reading the next record from a started stream.
+ *       Add some codes to process_record() to handle the record.
+ *       Then call stream->checkpoint_callback() to return.
  */
 
 /* Success/error/cleanup handling. */
@@ -199,6 +208,9 @@ void libxl__stream_read_start(libxl__egc *egc,
 
     stream->running = true;
     stream->phase   = SRS_PHASE_NORMAL;
+
+    if (stream->back_channel)
+        return;
 
     if (stream->legacy) {
         /* Convert the legacy stream. */
@@ -699,6 +711,11 @@ static void stream_done(libxl__egc *egc,
     assert(stream->running);
     assert(!stream->in_checkpoint);
     stream->running = false;
+
+    if (stream->back_channel) {
+        stream->completion_callback(egc, stream, stream->rc);
+        return;
+    }
 
     if (stream->incoming_record)
         free_record(stream->incoming_record);

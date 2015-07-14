@@ -3358,6 +3358,7 @@ struct libxl__stream_read_state {
     libxl__domain_create_state *dcs;
     int fd;
     bool legacy;
+    bool back_channel;
     void (*completion_callback)(libxl__egc *egc,
                                 libxl__stream_read_state *srs,
                                 int rc);
