@@ -3369,6 +3369,7 @@ struct libxl__stream_read_state {
     int rc;
     bool running;
     bool in_checkpoint;
+    bool in_colo_context;
     libxl__save_helper_state shs;
     libxl__conversion_helper_state chs;
 
@@ -3396,6 +3397,8 @@ _hidden void libxl__stream_read_start(libxl__egc *egc,
                                       libxl__stream_read_state *stream);
 _hidden void libxl__stream_read_start_checkpoint(libxl__egc *egc,
                                                  libxl__stream_read_state *stream);
+_hidden void libxl__stream_read_colo_context(libxl__egc *egc,
+                                             libxl__stream_read_state *stream);
 _hidden void libxl__stream_read_abort(libxl__egc *egc,
                                       libxl__stream_read_state *stream, int rc);
 static inline bool

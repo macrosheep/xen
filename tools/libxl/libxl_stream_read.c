@@ -152,6 +152,13 @@ static void write_emulator_done(libxl__egc *egc,
                                 libxl__datacopier_state *dc,
                                 int rc, int onwrite, int errnoval);
 
+/* Handlers for colo context mini-loop */
+static void handle_colo_context(libxl__egc *egc,
+                                libxl__stream_read_state *stream,
+                                libxl__sr_record_buf *rec);
+static void colo_context_done(libxl__egc *egc,
+                              libxl__stream_read_state *stream, int rc);
+
 /*----- Helpers -----*/
 
 /* Helper to set up reading some data from the stream. */
@@ -569,6 +576,15 @@ static bool process_record(libxl__egc *egc,
         checkpoint_done(egc, stream, 0);
         break;
 
+    case REC_TYPE_COLO_CONTEXT:
+        if (!stream->in_colo_context) {
+            LOG(ERROR, "Unexpected COLO_CONTEXT record in stream");
+            rc = ERROR_FAIL;
+            goto err;
+        }
+        handle_colo_context(egc, stream, rec);
+        break;
+
     default:
         LOG(ERROR, "Unrecognised record 0x%08x", rec->hdr.type);
         rc = ERROR_FAIL;
@@ -675,6 +691,11 @@ static void stream_complete(libxl__egc *egc,
          * libxl__xc_domain_restore_done()
          */
         checkpoint_done(egc, stream, rc);
+        return;
+    }
+
+    if (stream->in_colo_context) {
+        colo_context_done(egc, stream, rc);
         return;
     }
 
@@ -792,6 +813,37 @@ static void check_all_finished(libxl__egc *egc,
         return;
 
     stream->completion_callback(egc, stream, stream->rc);
+}
+
+/*----- COLO context handlers -----*/
+
+void libxl__stream_read_colo_context(libxl__egc *egc,
+                                     libxl__stream_read_state *stream)
+{
+    assert(stream->running);
+    assert(!stream->in_checkpoint);
+    assert(!stream->in_colo_context);
+    stream->in_colo_context = true;
+
+    setup_read_record(egc, stream);
+    process_record(egc, stream);
+}
+
+static void handle_colo_context(libxl__egc *egc,
+                                libxl__stream_read_state *stream,
+                                libxl__sr_record_buf *rec)
+{
+    libxl_sr_colo_context *colo_context = rec->body;
+
+    colo_context_done(egc, stream, colo_context->id);
+}
+
+static void colo_context_done(libxl__egc *egc,
+                              libxl__stream_read_state *stream, int rc)
+{
+    assert(stream->in_colo_context);
+    stream->in_colo_context = false;
+    stream->checkpoint_callback(egc, stream, rc);
 }
 
 /*
