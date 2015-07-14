@@ -2989,6 +2989,7 @@ struct libxl__stream_write_state {
     libxl__ao *ao;
     libxl__domain_save_state *dss;
     int fd;
+    bool back_channel;
     void (*completion_callback)(libxl__egc *egc,
                                 libxl__stream_write_state *sws,
                                 int rc);

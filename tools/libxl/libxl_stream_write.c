@@ -47,6 +47,13 @@
  *  - Toolstack record
  *  - if (hvm), Qemu record
  *  - Checkpoint end record
+ *
+ * For back channel stream:
+ * - libxl__stream_write_start()
+ *    - Set up the stream to running state
+ *
+ * - Add a new API to write the record. When the record is written
+ *   out, call stream->checkpoint_callback() to return.
  */
 
 /* Success/error/cleanup handling. */
@@ -178,6 +185,9 @@ void libxl__stream_write_start(libxl__egc *egc,
 
     stream->running = true;
 
+    if (stream->back_channel)
+        return;
+
     dc->ao        = ao;
     dc->readfd    = -1;
     dc->writewhat = "save/migration stream";
@@ -207,6 +217,7 @@ void libxl__stream_write_start_checkpoint(libxl__egc *egc,
 {
     assert(stream->running);
     assert(!stream->in_checkpoint);
+    assert(!stream->back_channel);
     stream->in_checkpoint = true;
 
     write_toolstack_record(egc, stream);
@@ -499,6 +510,11 @@ static void stream_done(libxl__egc *egc,
 {
     assert(stream->running);
     stream->running = false;
+
+    if (stream->back_channel) {
+        stream->completion_callback(egc, stream, stream->rc);
+        return;
+    }
 
     if (stream->emu_carefd)
         libxl__carefd_close(stream->emu_carefd);
