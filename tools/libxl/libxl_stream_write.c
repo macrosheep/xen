@@ -96,6 +96,16 @@ static void write_checkpoint_end_record(libxl__egc *egc,
 static void checkpoint_end_record_done(libxl__egc *egc,
                                        libxl__stream_write_state *stream);
 
+/* COLO context */
+static void write_colo_context(libxl__egc *egc,
+                               libxl__stream_write_state *stream,
+                               libxl_sr_colo_context *colo_context);
+static void write_colo_context_done(libxl__egc *egc,
+                                    libxl__datacopier_state *dc,
+                                    int rc, int onwrite, int errnoval);
+static void colo_context_done(libxl__egc *egc,
+                              libxl__stream_write_state *stream, int rc);
+
 /*----- Helpers -----*/
 
 static void write_done(libxl__egc *egc,
@@ -500,6 +510,11 @@ static void stream_complete(libxl__egc *egc,
         return;
     }
 
+    if (stream->in_colo_context) {
+        colo_context_done(egc, stream, rc);
+        return;
+    }
+
     if (!stream->rc)
         stream->rc = rc;
     stream_done(egc, stream);
@@ -553,6 +568,78 @@ static void check_all_finished(libxl__egc *egc,
         return;
 
     stream->completion_callback(egc, stream, stream->rc);
+}
+
+/*----- COLO context -----*/
+void libxl__stream_write_colo_context(libxl__egc *egc,
+                                      libxl__stream_write_state *stream,
+                                      libxl_sr_colo_context *colo_context)
+{
+    assert(stream->running);
+    assert(!stream->in_checkpoint);
+    assert(!stream->in_colo_context);
+    stream->in_colo_context = true;
+
+    write_colo_context(egc, stream, colo_context);
+}
+
+static void write_colo_context(libxl__egc *egc,
+                               libxl__stream_write_state *stream,
+                               libxl_sr_colo_context *colo_context)
+{
+    static const uint8_t zero_padding[1U << REC_ALIGN_ORDER] = { 0 };
+    libxl__datacopier_state *dc = &stream->dc;
+    STATE_AO_GC(stream->ao);
+    struct libxl__sr_rec_hdr rec = { REC_TYPE_COLO_CONTEXT, 0 };
+    int rc = 0;
+    uint32_t padding_len;
+
+    dc->copywhat = "colo context record";
+    dc->writewhat = "save/migration stream";
+    dc->callback = write_colo_context_done;
+
+    rc = libxl__datacopier_start(dc);
+    if (rc)
+        goto err;
+
+    rec.length = sizeof(*colo_context);
+
+    libxl__datacopier_prefixdata(egc, dc, &rec, sizeof(rec));
+    libxl__datacopier_prefixdata(egc, dc, colo_context, rec.length);
+
+    padding_len = ROUNDUP(rec.length, REC_ALIGN_ORDER) - rec.length;
+    if (padding_len)
+        libxl__datacopier_prefixdata(egc, dc, zero_padding, padding_len);
+
+    return;
+
+ err:
+    assert(rc);
+    stream_complete(egc, stream, rc);
+}
+
+static void write_colo_context_done(libxl__egc *egc,
+                                    libxl__datacopier_state *dc,
+                                    int rc, int onwrite, int errnoval)
+{
+    libxl__stream_write_state *stream = CONTAINER_OF(dc, *stream, dc);
+    STATE_AO_GC(stream->ao);
+
+    if (rc || onwrite || errnoval) {
+        stream_complete(egc, stream, rc ?: ERROR_FAIL);
+        return;
+    }
+
+    colo_context_done(egc, stream, rc);
+    return;
+}
+
+static void colo_context_done(libxl__egc *egc,
+                              libxl__stream_write_state *stream, int rc)
+{
+    assert(stream->in_colo_context);
+    stream->in_colo_context = false;
+    stream->checkpoint_callback(egc, stream, rc);
 }
 
 /*

@@ -3000,6 +3000,7 @@ struct libxl__stream_write_state {
     int rc;
     bool running;
     bool in_checkpoint;
+    bool in_colo_context;
     libxl__save_helper_state shs;
 
     /* Main stream-writing data. */
@@ -3019,6 +3020,10 @@ _hidden void libxl__stream_write_start(libxl__egc *egc,
 _hidden void
 libxl__stream_write_start_checkpoint(libxl__egc *egc,
                                      libxl__stream_write_state *stream);
+_hidden void
+libxl__stream_write_colo_context(libxl__egc *egc,
+                                 libxl__stream_write_state *stream,
+                                 libxl_sr_colo_context *colo_context);
 _hidden void libxl__stream_write_abort(libxl__egc *egc,
                                        libxl__stream_write_state *stream,
                                        int rc);
