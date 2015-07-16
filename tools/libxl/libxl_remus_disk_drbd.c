@@ -146,7 +146,7 @@ static void match_async_exec_cb(libxl__egc *egc,
         goto out;
 
     if (status) {
-        rc = ERROR_REMUS_DEVOPS_DOES_NOT_MATCH;
+        rc = ERROR_CHECKPOINT_DEVOPS_DOES_NOT_MATCH;
         /* BUG: seems to assume that any exit status means `no match' */
         /* BUG: exit status will have been logged as an error */
         goto out;

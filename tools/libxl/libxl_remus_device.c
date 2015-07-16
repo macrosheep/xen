@@ -150,7 +150,7 @@ static void remus_devices_setup(libxl__egc *egc,
         dev->ops_index = -1;
         libxl__multidev_prepare_with_aodev(&rds->multidev, &dev->aodev);
 
-        dev->aodev.rc = ERROR_REMUS_DEVICE_NOT_SUPPORTED;
+        dev->aodev.rc = ERROR_CHECKPOINT_DEVICE_NOT_SUPPORTED;
         dev->aodev.callback = device_setup_iterate;
         device_setup_iterate(egc,&dev->aodev);
     }
@@ -165,8 +165,8 @@ static void device_setup_iterate(libxl__egc *egc, libxl__ao_device *aodev)
     libxl__remus_device *dev = CONTAINER_OF(aodev, *dev, aodev);
     EGC_GC;
 
-    if (aodev->rc != ERROR_REMUS_DEVICE_NOT_SUPPORTED &&
-        aodev->rc != ERROR_REMUS_DEVOPS_DOES_NOT_MATCH)
+    if (aodev->rc != ERROR_CHECKPOINT_DEVICE_NOT_SUPPORTED &&
+        aodev->rc != ERROR_CHECKPOINT_DEVOPS_DOES_NOT_MATCH)
         /* might be success or disaster */
         goto out;
 
@@ -195,7 +195,7 @@ static void device_setup_iterate(libxl__egc *egc, libxl__ao_device *aodev)
                 " (device=%s:%"PRId32"/%"PRId32")",
                 libxl__device_kind_to_string(dev->kind),
                 domid, devid);
-            aodev->rc = ERROR_REMUS_DEVICE_NOT_SUPPORTED;
+            aodev->rc = ERROR_CHECKPOINT_DEVICE_NOT_SUPPORTED;
             goto out;
         }
     } while (dev->ops->kind != dev->kind);

@@ -2827,7 +2827,7 @@ struct libxl__remus_device_instance_ops {
      * device. If matched, the device will then be managed with this set of
      * subkind operations.
      * Yields 0 if the device successfully set up.
-     * REMUS_DEVOPS_DOES_NOT_MATCH if the ops does not match the device.
+     * CHECKPOINT_DEVOPS_DOES_NOT_MATCH if the ops does not match the device.
      * any other rc indicates failure.
      */
     void (*setup)(libxl__egc *egc, libxl__remus_device *dev);
